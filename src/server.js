@@ -78,6 +78,7 @@ function formatLog(log, index) {
     naam: log.naam,
     tijdslot,
     resultaat: RESULTAAT_MAP[log.classification] || log.classification,
+    opvolging: log.followUp === true,
     antwoord: log.rawResponse || '—',
     tijdstip,
   };

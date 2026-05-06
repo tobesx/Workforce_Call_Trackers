@@ -46,7 +46,12 @@ Classificeer het antwoord van de medewerker:
 - OTHER: vraag, opmerking, of onduidelijk → menselijke opvolging nodig
 - ONGOING: gesprek nog niet afgerond (vraag om herhaling, tussenvraag, wacht op antwoord)
 
-Antwoord ALTIJD als JSON: { "response": "tekst om uit te spreken", "classification": "YES|NO|OTHER|ONGOING" }`;
+Bepaal ook of menselijke opvolging nodig is naast de primaire classificatie:
+- followUp: true → persoon bevestigt of weigert maar stelt een bijkomende vraag, conditie, of laat deur open (bv. "Ja, maar kun je me even terugbellen?", "Nee, maar misschien volgende week")
+- followUp: false → antwoord is duidelijk en volledig afgerond, geen verdere actie nodig
+- Bij OTHER of ONGOING: followUp altijd true
+
+Antwoord ALTIJD als JSON: { "response": "tekst om uit te spreken", "classification": "YES|NO|OTHER|ONGOING", "followUp": true|false }`;
 }
 
 async function handleCallStart(req, res) {
@@ -92,7 +97,7 @@ async function handleGather(req, res) {
   }
 
   const messages = [...history, { role: 'user', content: speechResult }];
-  const { agentText, classification, updatedMessages } = await callAgent(messages);
+  const { agentText, classification, followUp, updatedMessages } = await callAgent(messages);
 
   sessions.update(callSid, { history: updatedMessages });
 
@@ -103,6 +108,7 @@ async function handleGather(req, res) {
       tijdslot: person.tijdslot,
       callSid,
       classification,
+      followUp,
       rawResponse: speechResult,
       answeredCall: true,
     });
@@ -129,6 +135,7 @@ async function handleStatus(req, res) {
       tijdslot: person.tijdslot,
       callSid: CallSid,
       classification: 'NO_ANSWER',
+      followUp: false,
       rawResponse: null,
       answeredCall: false,
     });
@@ -147,6 +154,8 @@ async function callAgent(messages) {
   let agentText;
   let classification;
 
+  let followUp = false;
+
   try {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -156,18 +165,20 @@ async function callAgent(messages) {
     const parsed = JSON.parse(completion.choices[0].message.content);
     agentText = parsed.response;
     classification = parsed.classification;
+    followUp = parsed.followUp === true;
   } catch (err) {
     console.error('OpenAI error:', err.message);
     agentText = 'Er is een technisch probleem. Iemand van ICO Terminals neemt contact met u op.';
     classification = 'OTHER';
+    followUp = true;
   }
 
   const updatedMessages = [
     ...messages,
-    { role: 'assistant', content: JSON.stringify({ response: agentText, classification }) },
+    { role: 'assistant', content: JSON.stringify({ response: agentText, classification, followUp }) },
   ];
 
-  return { agentText, classification, updatedMessages };
+  return { agentText, classification, followUp, updatedMessages };
 }
 
 async function respondWithTwiml(res, agentText, classification, callSid) {

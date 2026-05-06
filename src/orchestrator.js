@@ -9,12 +9,12 @@ const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TO
 const REAL_PHONE = process.env.REAL_PHONE || '+32471461722';
 
 const MOCK_RESPONSES = [
-  { classification: 'YES',       rawResponse: 'Ja, ik ben beschikbaar.' },
-  { classification: 'YES',       rawResponse: 'Geen probleem, ik kom.' },
-  { classification: 'NO',        rawResponse: 'Nee, ik kan die dag niet.' },
-  { classification: 'NO',        rawResponse: 'Niet beschikbaar vandaag.' },
-  { classification: 'OTHER',     rawResponse: 'Ik bel later terug.' },
-  { classification: 'NO_ANSWER', rawResponse: null },
+  { classification: 'YES',       followUp: false, rawResponse: 'Ja, ik ben beschikbaar.' },
+  { classification: 'YES',       followUp: true,  rawResponse: 'Ja, maar kunt u me even terugbellen over het tijdstip?' },
+  { classification: 'NO',        followUp: false, rawResponse: 'Nee, ik kan die dag niet.' },
+  { classification: 'NO',        followUp: true,  rawResponse: 'Niet beschikbaar vandaag, maar misschien volgende week.' },
+  { classification: 'OTHER',     followUp: true,  rawResponse: 'Ik bel later terug.' },
+  { classification: 'NO_ANSWER', followUp: false, rawResponse: null },
 ];
 
 async function initiateOutbound(persons) {
@@ -70,6 +70,7 @@ async function mockCall(person) {
     tijdslot:     person.tijdslot,
     callSid,
     classification: mock.classification,
+    followUp:     mock.followUp,
     rawResponse:  mock.rawResponse,
     answeredCall: mock.classification !== 'NO_ANSWER',
   });
