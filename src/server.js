@@ -4,7 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 
-const { initiateOutbound } = require('./orchestrator');
+const { initiateOutbound, initiateCallSingle } = require('./orchestrator');
 const { handleCallStart, handleGather, handleStatus } = require('./call-handler');
 const { getShifts, updateShift } = require('./shifts');
 const { getLogs, clearLogs } = require('./logger');
@@ -82,6 +82,38 @@ function formatLog(log, index) {
     tijdstip,
   };
 }
+
+// --- Single-call endpoints (frontend-orchestrated flow) ---
+
+app.post('/api/outbound/call', async (req, res) => {
+  try {
+    const result = await initiateCallSingle(req.body.person);
+    res.json(result);
+  } catch (err) {
+    console.error('Single call error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/outbound/call/:callSid/wait', (req, res) => {
+  const { callSid } = req.params;
+  const TIMEOUT_MS = 5 * 60 * 1000;
+  const POLL_MS = 1000;
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  const interval = setInterval(() => {
+    const logs = getLogs();
+    const log = logs.find(l => l.callSid === callSid);
+    if (log) {
+      clearInterval(interval);
+      return res.json({ status: 'complete', result: formatLog(log, logs.indexOf(log)) });
+    }
+    if (Date.now() >= deadline) {
+      clearInterval(interval);
+      return res.json({ status: 'timeout' });
+    }
+  }, POLL_MS);
+});
 
 app.get('/api/logs', (req, res) => {
   res.json(getLogs().map(formatLog));

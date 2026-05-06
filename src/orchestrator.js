@@ -62,12 +62,13 @@ async function initiateCall(person) {
 
 async function mockCall(person) {
   const mock = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
+  const callSid = `MOCK-${person.id}-${Date.now()}`;
 
   logResponse({
     personId:     person.id,
     naam:         person.naam,
     tijdslot:     person.tijdslot,
-    callSid:      `MOCK-${person.id}-${Date.now()}`,
+    callSid,
     classification: mock.classification,
     rawResponse:  mock.rawResponse,
     answeredCall: mock.classification !== 'NO_ANSWER',
@@ -75,6 +76,14 @@ async function mockCall(person) {
 
   markCallDone();
   console.log(`[MOCK] ${person.naam} → ${mock.classification}`);
+  return callSid;
 }
 
-module.exports = { initiateOutbound };
+async function initiateCallSingle(person) {
+  const callSid = person.telefoon === REAL_PHONE
+    ? await initiateCall(person)
+    : await mockCall(person);
+  return { callSid };
+}
+
+module.exports = { initiateOutbound, initiateCallSingle };
