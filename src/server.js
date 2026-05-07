@@ -8,7 +8,7 @@ const { initiateOutbound, initiateCallSingle } = require('./orchestrator');
 const { handleCallStart, handleGather, handleStatus } = require('./call-handler');
 const { getShifts, updateShift } = require('./shifts');
 const { getLogs, clearLogs } = require('./logger');
-const { isComplete } = require('./run-state');
+const { initRun, isComplete } = require('./run-state');
 
 // Ensure dirs exist
 ['audio', 'logs'].forEach(dir => {
@@ -84,6 +84,14 @@ function formatLog(log, index) {
   };
 }
 
+app.post('/api/outbound/session/start', (req, res) => {
+  const { total } = req.body;
+  if (!total || total < 1) return res.status(400).json({ error: 'total vereist' });
+  clearLogs();
+  initRun(total);
+  res.json({ ok: true, total });
+});
+
 // --- Single-call endpoints (frontend-orchestrated flow) ---
 
 app.post('/api/outbound/call', async (req, res) => {
@@ -117,7 +125,7 @@ app.get('/api/outbound/call/:callSid/wait', (req, res) => {
 });
 
 app.get('/api/logs', (req, res) => {
-  res.json(getLogs().map(formatLog));
+  res.json({ logs: getLogs().map(formatLog), complete: isComplete() });
 });
 
 // --- Twilio webhooks ---
