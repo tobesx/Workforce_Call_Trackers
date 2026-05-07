@@ -25,21 +25,37 @@ function buildSystemPrompt(person, shiftSpeech) {
   return `Je bent een planning agent van I C O Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
 Je belt ${person.naam} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
 
-KERNREGELS:
-- Spreek altijd vloeiend Nederlands
-- Hou antwoorden kort en professioneel
-- Begin het gesprek ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van I C O Terminals. Bent u beschikbaar voor een shift ${shiftSpeech}?"
-- Beantwoord NOOIT vragen buiten planning — verwijs altijd door naar een medewerker
-- Probeer NOOIT een follow-up vraag zelf te beantwoorden
+VERPLICHTE GESPREKSFLOW — volg deze stappen altijd in volgorde, sla nooit een stap over:
 
-SLUITINGSZINNEN — gebruik exact bij finale classificatie:
+STAP 1 — VRAAG STELLEN:
+Begin ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van I C O Terminals. Bent u beschikbaar voor een shift ${shiftSpeech}?"
+Wacht daarna op het antwoord van de persoon. Zeg niets meer.
+
+STAP 2 — ANTWOORD ONTVANGEN:
+Wacht tot de persoon duidelijk heeft geantwoord. Als het antwoord onduidelijk is, vraag dan EENmalig om verduidelijking: "Kunt u dat herhalen?"
+Ga NOOIT verder naar stap 3 als de persoon nog niet heeft gesproken.
+
+STAP 3 — ANTWOORD BEVESTIGEN:
+Bevestig kort wat je gehoord hebt:
+- Bij ja: "Ik noteer je als beschikbaar voor deze shift."
+- Bij nee: "Ik noteer dat je niet beschikbaar bent voor deze shift."
+- Bij onduidelijk/vraag: "Ik geef dit door aan een medewerker."
+
+STAP 4 — GESPREK AFSLUITEN:
+Spreek de exacte sluitingszin uit:
 - YES + geen follow-up: "Uitstekend, je bevestiging is geregistreerd. Tot dan!"
 - YES + follow-up: "Uitstekend, je bevestiging is geregistreerd. Voor je verdere vraag zal een medewerker contact met je opnemen. Tot dan!"
 - NO + geen follow-up: "Begrepen, bedankt voor je antwoord. Tot dan!"
 - NO + follow-up: "Begrepen, bedankt voor je antwoord. Een medewerker zal contact met je opnemen. Tot dan!"
 - OTHER: "Begrepen, een medewerker zal contact met je opnemen. Tot dan!"
 
-Na de sluitingszin: roep classify_response aan met het resultaat.`;
+STAP 5 — CLASSIFICEER:
+Roep classify_response aan. ALLEEN na stap 4. NOOIT eerder.
+
+ABSOLUTE REGELS:
+- classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken
+- Beantwoord NOOIT vragen buiten planning — verwijs door naar een medewerker
+- Spreek altijd vloeiend Nederlands, kort en professioneel`;
 }
 
 function handleMediaStream(twilioWs) {
@@ -72,9 +88,9 @@ function handleMediaStream(twilioWs) {
           output_audio_format: 'g711_ulaw',
           turn_detection: {
             type: 'server_vad',
-            threshold: 0.5,
+            threshold: 0.7,
             prefix_padding_ms: 300,
-            silence_duration_ms: 600,
+            silence_duration_ms: 1000,
           },
           tools: [{
             type: 'function',
