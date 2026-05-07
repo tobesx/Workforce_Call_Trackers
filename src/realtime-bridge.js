@@ -35,19 +35,17 @@ STAP 2 — ANTWOORD ONTVANGEN:
 Wacht tot de persoon duidelijk heeft geantwoord. Als het antwoord onduidelijk is, vraag dan EENmalig om verduidelijking: "Kunt u dat herhalen?"
 Ga NOOIT verder naar stap 3 als de persoon nog niet heeft gesproken.
 
-STAP 3 — ANTWOORD BEVESTIGEN:
-Bevestig kort wat je gehoord hebt:
-- Bij ja: "Ik noteer je als beschikbaar voor deze shift."
-- Bij nee: "Ik noteer dat je niet beschikbaar bent voor deze shift."
-- Bij onduidelijk/vraag: "Ik geef dit door aan een medewerker."
+STAP 3 — ANTWOORD BEVESTIGEN EN AFSLUITEN:
+Reageer natuurlijk en empathisch op wat de persoon zei. Kort, professioneel, menselijk.
+Verwerk in je antwoord:
+- Een erkenning van hun antwoord (passend bij de situatie)
+- Als er een follow-up vraag of opmerking was: vermeld dat een medewerker contact opneemt
+- Een beleefde afsluiting (bv. "Tot dan!", "Bedankt, tot ziens!", "Fijne dag nog!")
 
-STAP 4 — GESPREK AFSLUITEN:
-Spreek de exacte sluitingszin uit:
-- YES + geen follow-up: "Uitstekend, je bevestiging is geregistreerd. Tot dan!"
-- YES + follow-up: "Uitstekend, je bevestiging is geregistreerd. Voor je verdere vraag zal een medewerker contact met je opnemen. Tot dan!"
-- NO + geen follow-up: "Begrepen, bedankt voor je antwoord. Tot dan!"
-- NO + follow-up: "Begrepen, bedankt voor je antwoord. Een medewerker zal contact met je opnemen. Tot dan!"
-- OTHER: "Begrepen, een medewerker zal contact met je opnemen. Tot dan!"
+Voorbeelden van toon (niet letterlijk overnemen, gebruik als inspiratie):
+- Bij ja: warm en bevestigend
+- Bij nee: begripvol, geen druk
+- Bij onduidelijk: rustig, verwijs naar medewerker
 
 STAP 5 — CLASSIFICEER:
 Roep classify_response aan. ALLEEN na stap 4. NOOIT eerder.
@@ -133,14 +131,6 @@ function handleMediaStream(twilioWs) {
         }));
       }
 
-      if (event.type === 'response.audio.done' && finalLogged && streamSid) {
-        twilioWs.send(JSON.stringify({
-          event: 'mark',
-          streamSid,
-          mark: { name: 'hangup' },
-        }));
-      }
-
       if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response' && !finalLogged) {
         finalLogged = true;
         try {
@@ -158,6 +148,13 @@ function handleMediaStream(twilioWs) {
           });
           markCallDone();
           console.log(`[REALTIME] ${person.naam} → ${args.classification}`);
+          if (streamSid) {
+            twilioWs.send(JSON.stringify({
+              event: 'mark',
+              streamSid,
+              mark: { name: 'hangup' },
+            }));
+          }
         } catch (err) {
           console.error('[REALTIME] classify_response parse error:', err.message);
         }
