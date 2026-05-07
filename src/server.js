@@ -50,10 +50,11 @@ app.get('/api/logs', (req, res) => {
 
 app.post('/voice/start', (req, res) => {
   const { personId } = req.query;
-  const wsUrl = `${process.env.BASE_URL.replace('https://', 'wss://')}/media-stream?personId=${personId}`;
+  const wsUrl = `${process.env.BASE_URL.replace('https://', 'wss://')}/media-stream`;
   const twiml = new VoiceResponse();
   const connect = twiml.connect();
-  connect.stream({ url: wsUrl });
+  const stream = connect.stream({ url: wsUrl });
+  stream.parameter({ name: 'personId', value: personId });
   res.type('text/xml').send(twiml.toString());
 });
 
@@ -92,7 +93,7 @@ server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === '/media-stream') {
     wss.handleUpgrade(req, socket, head, (ws) => {
-      handleMediaStream(ws, url.searchParams.get('personId'));
+      handleMediaStream(ws);
     });
   } else {
     socket.destroy();

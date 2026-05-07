@@ -39,21 +39,13 @@ SLUITINGSZINNEN — gebruik exact bij finale classificatie:
 Na de sluitingszin: roep classify_response aan met het resultaat.`;
 }
 
-function handleMediaStream(twilioWs, personId) {
+function handleMediaStream(twilioWs) {
   let streamSid = null;
   let callSid = null;
   let openAiWs = null;
   let finalLogged = false;
-
-  const person = sessions.get(`person-${personId}`);
-  if (!person) {
-    console.error(`[REALTIME] Geen sessie voor personId ${personId}`);
-    twilioWs.close();
-    return;
-  }
-  sessions.delete(`person-${personId}`);
-
-  const shiftSpeech = shiftToSpeech(person.tijdslot);
+  let person = null;
+  let shiftSpeech = null;
 
   function connectToOpenAI() {
     openAiWs = new WebSocket(
@@ -159,6 +151,17 @@ function handleMediaStream(twilioWs, personId) {
     if (msg.event === 'start') {
       streamSid = msg.start.streamSid;
       callSid = msg.start.callSid;
+      const personId = msg.start.customParameters?.personId;
+
+      person = sessions.get(`person-${personId}`);
+      if (!person) {
+        console.error(`[REALTIME] Geen sessie voor personId ${personId}`);
+        twilioWs.close();
+        return;
+      }
+      sessions.delete(`person-${personId}`);
+      shiftSpeech = shiftToSpeech(person.tijdslot);
+
       sessions.set(callSid, { person, history: [], finalLogged: false });
       console.log(`[REALTIME] Stream gestart: ${callSid} → ${person.naam}`);
       connectToOpenAI();
