@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const twilio = require('twilio');
 const sessions = require('./sessions');
 const { logResponse } = require('./logger');
-const { markCallDone } = require('./run-state');
+const { markCallDone, getToken } = require('./run-state');
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -135,6 +135,11 @@ function handleMediaStream(twilioWs) {
         finalLogged = true;
         try {
           const args = JSON.parse(event.arguments);
+          const callSession = sessions.get(callSid);
+          if (callSession?.sessionToken !== getToken()) {
+            console.log(`[REALTIME] Stale call genegeerd: ${callSid}`);
+            return;
+          }
           if (callSid) sessions.set(callSid, { person, history: [], finalLogged: true });
           logResponse({
             personId: person.id,

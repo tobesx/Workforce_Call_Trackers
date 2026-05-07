@@ -1,7 +1,11 @@
-let state = { total: 0, completed: 0 };
+let state = { total: 0, completed: 0, token: null };
 
 function initRun(total) {
-  state = { total, completed: 0 };
+  state = { total, completed: 0, token: Date.now().toString() };
+}
+
+function getToken() {
+  return state.token;
 }
 
 function markCallDone() {
@@ -12,4 +16,4 @@ function isComplete() {
   return state.total > 0 && state.completed >= state.total;
 }
 
-module.exports = { initRun, markCallDone, isComplete };
+module.exports = { initRun, getToken, markCallDone, isComplete };
