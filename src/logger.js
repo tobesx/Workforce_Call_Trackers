@@ -1,15 +1,6 @@
-const fs = require('fs');
-const path = require('path');
+let logs = [];
 
-const LOGS_FILE = path.join(__dirname, '../logs/responses.json');
-
-function readLogs() {
-  if (!fs.existsSync(LOGS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(LOGS_FILE, 'utf-8'));
-}
-
-function logResponse({ personId, naam, tijdslot, callSid, classification, rawResponse, answeredCall }) {
-  const logs = readLogs();
+function logResponse({ personId, naam, tijdslot, callSid, classification, rawResponse, answeredCall, followUp }) {
   logs.push({
     id: Date.now().toString(),
     timestamp: new Date().toISOString(),
@@ -18,18 +9,18 @@ function logResponse({ personId, naam, tijdslot, callSid, classification, rawRes
     tijdslot,
     callSid,
     classification,
+    followUp: followUp === true,
     rawResponse: rawResponse || null,
     answeredCall,
   });
-  fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2));
 }
 
 function getLogs() {
-  return readLogs();
+  return logs;
 }
 
 function clearLogs() {
-  fs.writeFileSync(LOGS_FILE, JSON.stringify([], null, 2));
+  logs = [];
 }
 
 module.exports = { logResponse, getLogs, clearLogs };
