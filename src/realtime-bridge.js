@@ -117,6 +117,14 @@ function handleMediaStream(twilioWs) {
         }));
       }
 
+      if (event.type === 'response.audio.done' && finalLogged && streamSid) {
+        twilioWs.send(JSON.stringify({
+          event: 'mark',
+          streamSid,
+          mark: { name: 'hangup' },
+        }));
+      }
+
       if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response' && !finalLogged) {
         finalLogged = true;
         try {
@@ -134,11 +142,6 @@ function handleMediaStream(twilioWs) {
           });
           markCallDone();
           console.log(`[REALTIME] ${person.naam} → ${args.classification}`);
-          setTimeout(() => {
-            twilioClient.calls(callSid).update({ status: 'completed' }).catch(err =>
-              console.error('[REALTIME] Hangup error:', err.message)
-            );
-          }, 3000);
         } catch (err) {
           console.error('[REALTIME] classify_response parse error:', err.message);
         }
@@ -173,6 +176,12 @@ function handleMediaStream(twilioWs) {
       sessions.set(callSid, { person, history: [], finalLogged: false });
       console.log(`[REALTIME] Stream gestart: ${callSid} → ${person.naam}`);
       connectToOpenAI();
+    }
+
+    if (msg.event === 'mark' && msg.mark?.name === 'hangup') {
+      twilioClient.calls(callSid).update({ status: 'completed' }).catch(err =>
+        console.error('[REALTIME] Hangup error:', err.message)
+      );
     }
 
     if (msg.event === 'media' && openAiWs?.readyState === WebSocket.OPEN) {
