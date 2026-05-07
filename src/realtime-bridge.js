@@ -1,7 +1,10 @@
 const WebSocket = require('ws');
+const twilio = require('twilio');
 const sessions = require('./sessions');
 const { logResponse } = require('./logger');
 const { markCallDone } = require('./run-state');
+
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 function hourToNL(h) {
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
@@ -19,13 +22,13 @@ function shiftToSpeech(tijdslot) {
 }
 
 function buildSystemPrompt(person, shiftSpeech) {
-  return `Je bent een planning agent van ICO Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
+  return `Je bent een planning agent van I C O Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
 Je belt ${person.naam} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
 
 KERNREGELS:
 - Spreek altijd vloeiend Nederlands
 - Hou antwoorden kort en professioneel
-- Begin het gesprek ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van ICO Terminals. Bent u beschikbaar voor een shift ${shiftSpeech}?"
+- Begin het gesprek ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van I C O Terminals. Bent u beschikbaar voor een shift ${shiftSpeech}?"
 - Beantwoord NOOIT vragen buiten planning — verwijs altijd door naar een medewerker
 - Probeer NOOIT een follow-up vraag zelf te beantwoorden
 
@@ -131,6 +134,11 @@ function handleMediaStream(twilioWs) {
           });
           markCallDone();
           console.log(`[REALTIME] ${person.naam} → ${args.classification}`);
+          setTimeout(() => {
+            twilioClient.calls(callSid).update({ status: 'completed' }).catch(err =>
+              console.error('[REALTIME] Hangup error:', err.message)
+            );
+          }, 3000);
         } catch (err) {
           console.error('[REALTIME] classify_response parse error:', err.message);
         }
