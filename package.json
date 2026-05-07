@@ -2,7 +2,9 @@
   "name": "ico-terminals-voice",
   "version": "1.0.0",
   "main": "src/server.js",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
@@ -13,7 +15,8 @@
     "express": "^4.18.2",
     "openai": "^4.28.0",
     "twilio": "^5.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
