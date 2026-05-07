@@ -47,8 +47,8 @@ Voorbeelden van toon (niet letterlijk overnemen, gebruik als inspiratie):
 - Bij nee: begripvol, geen druk
 - Bij onduidelijk: rustig, verwijs naar medewerker
 
-STAP 5 — CLASSIFICEER:
-Roep classify_response aan. ALLEEN na stap 4. NOOIT eerder.
+STAP 4 — CLASSIFICEER:
+Roep classify_response aan. ALLEEN na stap 3. NOOIT eerder.
 
 ABSOLUTE REGELS:
 - classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken
@@ -59,12 +59,19 @@ ABSOLUTE REGELS:
 function handleMediaStream(twilioWs) {
   let streamSid = null;
   let callSid = null;
+  let sessionToken = null;
   let openAiWs = null;
   let finalLogged = false;
   let person = null;
   let shiftSpeech = null;
 
+  function log(msg)  { console.log(`[REALTIME] ${msg}`); }
+  function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
+  function err(msg)  { console.error(`[REALTIME] ${msg}`); }
+
   function connectToOpenAI() {
+    log(`OpenAI verbinden voor ${person.naam}...`);
+
     openAiWs = new WebSocket(
       'wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5',
       {
@@ -76,6 +83,8 @@ function handleMediaStream(twilioWs) {
     );
 
     openAiWs.on('open', () => {
+      log(`OpenAI verbonden voor ${person.naam}`);
+
       openAiWs.send(JSON.stringify({
         type: 'session.update',
         session: {
@@ -108,7 +117,6 @@ function handleMediaStream(twilioWs) {
         },
       }));
 
-      // Trigger opening
       openAiWs.send(JSON.stringify({
         type: 'conversation.item.create',
         item: {
@@ -118,6 +126,7 @@ function handleMediaStream(twilioWs) {
         },
       }));
       openAiWs.send(JSON.stringify({ type: 'response.create' }));
+      log(`Opening getriggerd voor ${person.naam}`);
     });
 
     openAiWs.on('message', (data) => {
@@ -131,16 +140,36 @@ function handleMediaStream(twilioWs) {
         }));
       }
 
-      if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response' && !finalLogged) {
+      if (event.type === 'input_audio_buffer.speech_started') {
+        log(`${person.naam} begint te spreken`);
+      }
+
+      if (event.type === 'input_audio_buffer.speech_stopped') {
+        log(`${person.naam} gestopt met spreken`);
+      }
+
+      if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        log(`${person.naam} transcript: "${event.transcript}"`);
+      }
+
+      if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response') {
+        log(`classify_response ontvangen voor ${person.naam}: ${event.arguments}`);
+
+        if (finalLogged) {
+          warn(`${person.naam}: classify_response al eerder verwerkt, genegeerd`);
+          return;
+        }
+
+        const currentToken = getToken();
+        if (sessionToken !== currentToken) {
+          warn(`${person.naam}: stale call (sessionToken ${sessionToken} ≠ ${currentToken}), genegeerd`);
+          return;
+        }
+
         finalLogged = true;
         try {
           const args = JSON.parse(event.arguments);
-          const callSession = sessions.get(callSid);
-          if (callSession?.sessionToken !== getToken()) {
-            console.log(`[REALTIME] Stale call genegeerd: ${callSid}`);
-            return;
-          }
-          if (callSid) sessions.set(callSid, { person, history: [], finalLogged: true });
+          sessions.set(callSid, { person, history: [], finalLogged: true, sessionToken });
           logResponse({
             personId: person.id,
             naam: person.naam,
@@ -152,26 +181,32 @@ function handleMediaStream(twilioWs) {
             answeredCall: true,
           });
           markCallDone();
-          console.log(`[REALTIME] ${person.naam} → ${args.classification}`);
+          log(`${person.naam} → ${args.classification} (followUp: ${args.followUp})`);
+
           if (streamSid) {
             twilioWs.send(JSON.stringify({
               event: 'mark',
               streamSid,
               mark: { name: 'hangup' },
             }));
+            log(`Mark 'hangup' verstuurd voor ${person.naam}`);
           }
-        } catch (err) {
-          console.error('[REALTIME] classify_response parse error:', err.message);
+        } catch (e) {
+          err(`classify_response parse error voor ${person.naam}: ${e.message}`);
         }
       }
 
+      if (event.type === 'response.done') {
+        log(`Response voltooid voor ${person.naam}`);
+      }
+
       if (event.type === 'error') {
-        console.error('[REALTIME] OpenAI error:', JSON.stringify(event.error));
+        err(`OpenAI fout voor ${person.naam}: ${JSON.stringify(event.error)}`);
       }
     });
 
-    openAiWs.on('error', (err) => console.error('[REALTIME] OpenAI WS error:', err.message));
-    openAiWs.on('close', () => console.log('[REALTIME] OpenAI verbinding gesloten'));
+    openAiWs.on('error', (e) => err(`OpenAI WS fout voor ${person?.naam}: ${e.message}`));
+    openAiWs.on('close', (code) => log(`OpenAI verbinding gesloten voor ${person?.naam} (code: ${code})`));
   }
 
   twilioWs.on('message', (data) => {
@@ -182,24 +217,41 @@ function handleMediaStream(twilioWs) {
       callSid = msg.start.callSid;
       const personId = msg.start.customParameters?.personId;
 
+      log(`Stream start ontvangen — callSid: ${callSid}, personId: ${personId}`);
+
+      const existingSession = sessions.get(callSid);
+      if (!existingSession) {
+        err(`Geen sessie gevonden voor callSid ${callSid}`);
+        twilioWs.close();
+        return;
+      }
+
+      // Bewaar sessionToken uit orchestrator sessie
+      sessionToken = existingSession.sessionToken;
+
       person = sessions.get(`person-${personId}`);
       if (!person) {
-        console.error(`[REALTIME] Geen sessie voor personId ${personId}`);
+        err(`Geen persoon gevonden voor personId ${personId}`);
         twilioWs.close();
         return;
       }
       sessions.delete(`person-${personId}`);
       shiftSpeech = shiftToSpeech(person.tijdslot);
 
-      sessions.set(callSid, { person, history: [], finalLogged: false });
-      console.log(`[REALTIME] Stream gestart: ${callSid} → ${person.naam}`);
+      // Update sessie, behoud sessionToken
+      sessions.set(callSid, { person, history: [], finalLogged: false, sessionToken });
+      log(`Stream gestart: ${callSid} → ${person.naam} (token: ${sessionToken})`);
       connectToOpenAI();
     }
 
-    if (msg.event === 'mark' && msg.mark?.name === 'hangup') {
-      twilioClient.calls(callSid).update({ status: 'completed' }).catch(err =>
-        console.error('[REALTIME] Hangup error:', err.message)
-      );
+    if (msg.event === 'mark') {
+      log(`Mark ontvangen van Twilio: ${msg.mark?.name}`);
+      if (msg.mark?.name === 'hangup') {
+        log(`Ophangen voor ${person?.naam}...`);
+        twilioClient.calls(callSid).update({ status: 'completed' })
+          .then(() => log(`Call beëindigd: ${callSid}`))
+          .catch((e) => err(`Hangup mislukt voor ${callSid}: ${e.message}`));
+      }
     }
 
     if (msg.event === 'media' && openAiWs?.readyState === WebSocket.OPEN) {
@@ -210,13 +262,17 @@ function handleMediaStream(twilioWs) {
     }
 
     if (msg.event === 'stop') {
+      log(`Stream gestopt voor ${person?.naam}`);
       openAiWs?.close();
     }
   });
 
-  twilioWs.on('close', () => openAiWs?.close());
-  twilioWs.on('error', (err) => {
-    console.error('[REALTIME] Twilio WS error:', err.message);
+  twilioWs.on('close', () => {
+    log(`Twilio WS gesloten voor ${person?.naam}`);
+    openAiWs?.close();
+  });
+  twilioWs.on('error', (e) => {
+    err(`Twilio WS fout voor ${person?.naam}: ${e.message}`);
     openAiWs?.close();
   });
 }
