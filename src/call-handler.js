@@ -25,6 +25,10 @@ function shiftToSpeech(tijdslot) {
   return `van ${hourToNL(parseInt(match[1]))} tot ${hourToNL(parseInt(match[3]))}`;
 }
 
+function buildOpeningText(person) {
+  return `Goedendag, u spreekt met de planningsagent van ICO Terminals. Bent u beschikbaar voor een shift ${shiftToSpeech(person.tijdslot)}?`;
+}
+
 function buildSystemPrompt(person) {
   const shiftSpeech = shiftToSpeech(person.tijdslot);
   return `Je bent een planning agent van ICO Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
@@ -33,9 +37,8 @@ Je belt ${person.naam} om te vragen of hij/zij beschikbaar is voor een shift.
 Shift: ${shiftSpeech}
 
 Regels:
-- Stel jezelf voor als de planning agent van ICO Terminals
+- Begin ALTIJD met exact deze openingszin: "Goedendag, u spreekt met de planningsagent van ICO Terminals. Bent u beschikbaar voor een shift ${shiftSpeech}?"
 - Je spreekt al met ${person.naam} — sla identiteitsverificatie volledig over, vraag NOOIT "Spreek ik met ...?"
-- Vraag of ${person.naam} beschikbaar is voor de shift ${shiftSpeech}
 - Spreek altijd vloeiend Nederlands, nooit cijfers of codes voorlezen
 - Reageer ENKEL op planningsgerelateerde vragen. Weiger beleefd maar duidelijk bij alle andere vragen.
 - Hou antwoorden kort en professioneel
@@ -66,16 +69,24 @@ async function handleCallStart(req, res) {
   }
   sessions.delete(`person-${personId}`);
 
-  const messages = [
+  const callSession = sessions.get(callSid);
+  const openingText = buildOpeningText(person);
+  const history = [
     { role: 'system', content: buildSystemPrompt(person) },
     { role: 'user', content: 'START_CALL' },
+    { role: 'assistant', content: JSON.stringify({ response: openingText, classification: 'ONGOING', followUp: false }) },
   ];
 
-  const { agentText, classification, updatedMessages } = await callAgent(messages);
+  sessions.set(callSid, { ...callSession, person, history });
 
-  sessions.set(callSid, { person, history: updatedMessages });
+  if (callSession?.openingAudio) {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ input: 'speech', action: '/voice/gather', speechTimeout: 'auto', language: 'nl-NL' });
+    gather.play(`${process.env.BASE_URL}/audio/${callSession.openingAudio}`);
+    return res.type('text/xml').send(twiml.toString());
+  }
 
-  return respondWithTwiml(res, agentText, classification, callSid);
+  return respondWithTwiml(res, openingText, 'ONGOING', callSid);
 }
 
 async function handleGather(req, res) {
@@ -223,4 +234,4 @@ async function respondWithTwiml(res, agentText, classification, callSid) {
   return res.type('text/xml').send(twiml.toString());
 }
 
-module.exports = { handleCallStart, handleGather, handleStatus };
+module.exports = { handleCallStart, handleGather, handleStatus, buildOpeningText };
