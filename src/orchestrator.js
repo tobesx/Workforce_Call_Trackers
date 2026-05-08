@@ -13,11 +13,11 @@ async function initiateCallSingle(person, runId) {
   try {
     openingAudio = await synthesize(buildOpeningText(person));
   } catch (err) {
-    console.error(`[PRE-GEN TTS] ${person.naam}: ${err.message}`);
+    console.error(`[PRE-GEN TTS] ${person.name}: ${err.message}`);
   }
 
   const call = await client.calls.create({
-    to: person.telefoon,
+    to: person.phone,
     from: process.env.TWILIO_PHONE_NUMBER,
     url: `${process.env.BASE_URL}/voice/start?personId=${person.id}`,
     statusCallback: `${process.env.BASE_URL}/voice/status`,
@@ -28,7 +28,7 @@ async function initiateCallSingle(person, runId) {
   const callId = await db.createCall(call.sid, person, runId);
   sessions.set(call.sid, { person, history: [], finalLogged: false, openingAudio });
 
-  console.log(`[OUTBOUND] ${call.sid} → ${person.naam} callId: ${callId} runId: ${runId}`);
+  console.log(`[OUTBOUND] ${call.sid} → ${person.name} callId: ${callId} runId: ${runId}`);
   return { callId, callSid: call.sid };
 }
 

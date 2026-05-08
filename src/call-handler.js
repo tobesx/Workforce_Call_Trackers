@@ -25,13 +25,13 @@ function shiftToSpeech(tijdslot) {
 }
 
 function buildOpeningText(person) {
-  return `Goedendag, u spreekt met de planningsagent van ICO Terminals. Bent u beschikbaar voor een shift ${shiftToSpeech(person.tijdslot)}?`;
+  return `Goedendag, u spreekt met de planningsagent van ICO Terminals. Bent u beschikbaar voor een shift ${shiftToSpeech(person.time_slot)}?`;
 }
 
 function buildSystemPrompt(person) {
-  const shiftSpeech = shiftToSpeech(person.tijdslot);
+  const shiftSpeech = shiftToSpeech(person.time_slot);
   return `Je bent een planning agent van ICO Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
-Je belt ${person.naam} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
+Je belt ${person.name} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
 
 KERNREGELS:
 - Spreek altijd vloeiend Nederlands, nooit cijfers of codes voorlezen
