@@ -1,6 +1,5 @@
 const twilio = require('twilio');
 const sessions = require('./sessions');
-const { getToken } = require('./run-state');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -16,7 +15,7 @@ async function initiateCallSingle(person) {
     statusCallbackEvent: ['no-answer', 'busy', 'failed', 'completed'],
   });
 
-  sessions.set(call.sid, { person, history: [], finalLogged: false, sessionToken: getToken() });
+  sessions.set(call.sid, { person, history: [], finalLogged: false });
 
   console.log(`[OUTBOUND] ${call.sid} → ${person.naam} (${person.telefoon})`);
   return { callSid: call.sid };

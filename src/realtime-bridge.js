@@ -1,8 +1,6 @@
 const WebSocket = require('ws');
 const twilio = require('twilio');
 const sessions = require('./sessions');
-const { logResponse } = require('./logger');
-const { markCallDone, getToken } = require('./run-state');
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -59,7 +57,6 @@ ABSOLUTE REGELS:
 function handleMediaStream(twilioWs) {
   let streamSid = null;
   let callSid = null;
-  let sessionToken = null;
   let openAiWs = null;
   let finalLogged = false;
   let person = null;
@@ -160,27 +157,10 @@ function handleMediaStream(twilioWs) {
           return;
         }
 
-        const currentToken = getToken();
-        if (sessionToken !== currentToken) {
-          warn(`${person.naam}: stale call (sessionToken ${sessionToken} ≠ ${currentToken}), genegeerd`);
-          return;
-        }
-
         finalLogged = true;
         try {
           const args = JSON.parse(event.arguments);
-          sessions.set(callSid, { person, history: [], finalLogged: true, sessionToken });
-          logResponse({
-            personId: person.id,
-            naam: person.naam,
-            tijdslot: person.tijdslot,
-            callSid,
-            classification: args.classification,
-            followUp: args.followUp,
-            rawResponse: args.rawResponse,
-            answeredCall: true,
-          });
-          markCallDone();
+          sessions.set(callSid, { person, history: [], finalLogged: true });
           log(`${person.naam} → ${args.classification} (followUp: ${args.followUp})`);
 
           if (streamSid) {
@@ -226,9 +206,6 @@ function handleMediaStream(twilioWs) {
         return;
       }
 
-      // Bewaar sessionToken uit orchestrator sessie
-      sessionToken = existingSession.sessionToken;
-
       person = sessions.get(`person-${personId}`);
       if (!person) {
         err(`Geen persoon gevonden voor personId ${personId}`);
@@ -238,9 +215,8 @@ function handleMediaStream(twilioWs) {
       sessions.delete(`person-${personId}`);
       shiftSpeech = shiftToSpeech(person.tijdslot);
 
-      // Update sessie, behoud sessionToken
-      sessions.set(callSid, { person, history: [], finalLogged: false, sessionToken });
-      log(`Stream gestart: ${callSid} → ${person.naam} (token: ${sessionToken})`);
+      sessions.set(callSid, { person, history: [], finalLogged: false });
+      log(`Stream gestart: ${callSid} → ${person.naam}`);
       connectToOpenAI();
     }
 
