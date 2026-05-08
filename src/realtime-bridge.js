@@ -87,6 +87,7 @@ function handleMediaStream(twilioWs) {
       openAiWs.send(JSON.stringify({
         type: 'session.update',
         session: {
+          type: 'realtime',
           modalities: ['audio', 'text'],
           instructions: buildSystemPrompt(person, shiftSpeech),
           voice: 'alloy',
