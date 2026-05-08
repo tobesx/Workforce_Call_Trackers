@@ -23,33 +23,33 @@ app.use('/audio', express.static(audioDir));
 
 // --- REST API (Retool) ---
 
-app.get('/api/calls', async (req, res) => {
+app.post('/api/runs', async (req, res) => {
   try {
-    const { since } = req.query;
-    if (!since) return res.status(400).json({ error: 'since parameter required' });
-    const records = await db.getCallsSince(since);
-    const allDone = records.length > 0 && records.every(r => r.status === 'completed');
-    res.json({ calls: records, complete: allDone });
+    const { total } = req.body;
+    if (!total || total < 1) return res.status(400).json({ error: 'total required' });
+    const runId = await db.createRun(total);
+    res.json({ runId });
   } catch (err) {
-    console.error('getCallsSince error:', err.message);
+    console.error('createRun error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/calls/:callId', async (req, res) => {
+app.get('/api/runs/:runId', async (req, res) => {
   try {
-    const record = await db.getCall(req.params.callId);
-    if (!record) return res.status(404).json({ error: 'not found' });
-    res.json(record);
+    const run = await db.getRun(req.params.runId);
+    if (!run) return res.status(404).json({ error: 'not found' });
+    res.json(run);
   } catch (err) {
-    console.error('getCall error:', err.message);
+    console.error('getRun error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/outbound/call', async (req, res) => {
   try {
-    const result = await initiateCallSingle(req.body.person);
+    const { person, runId } = req.body;
+    const result = await initiateCallSingle(person, runId);
     res.json(result);
   } catch (err) {
     console.error('Single call error:', err.message);

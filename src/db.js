@@ -7,31 +7,57 @@ const pool = new Pool({
 
 async function init() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS calls (
-      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      call_sid      TEXT UNIQUE NOT NULL,
-      person_id     TEXT,
-      name          TEXT,
-      time_slot     TEXT,
-      phone         TEXT,
-      status        TEXT NOT NULL DEFAULT 'pending',
-      classification TEXT,
-      follow_up     BOOLEAN,
-      raw_response  TEXT,
-      answered_call BOOLEAN,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    CREATE TABLE IF NOT EXISTS runs (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      total      INTEGER NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'in_progress',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  console.log('[DB] calls table ready');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS calls (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id         UUID REFERENCES runs(id) ON DELETE SET NULL,
+      call_sid       TEXT UNIQUE NOT NULL,
+      person_id      TEXT,
+      name           TEXT,
+      time_slot      TEXT,
+      phone          TEXT,
+      status         TEXT NOT NULL DEFAULT 'pending',
+      classification TEXT,
+      follow_up      BOOLEAN,
+      raw_response   TEXT,
+      answered_call  BOOLEAN,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // migrate existing calls table if run_id column is missing
+  await pool.query(`
+    ALTER TABLE calls ADD COLUMN IF NOT EXISTS
+      run_id UUID REFERENCES runs(id) ON DELETE SET NULL
+  `);
+
+  console.log('[DB] schema ready');
 }
 
-async function createCall(callSid, person) {
+async function createRun(total) {
   const { rows } = await pool.query(
-    `INSERT INTO calls (call_sid, person_id, name, time_slot, phone)
-     VALUES ($1, $2, $3, $4, $5)
+    'INSERT INTO runs (total) VALUES ($1) RETURNING id',
+    [total]
+  );
+  return rows[0].id;
+}
+
+async function createCall(callSid, person, runId) {
+  const { rows } = await pool.query(
+    `INSERT INTO calls (call_sid, person_id, name, time_slot, phone, run_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
-    [callSid, String(person.id), person.naam, person.tijdslot, person.telefoon]
+    [callSid, String(person.id), person.naam, person.tijdslot, person.telefoon, runId || null]
   );
   return rows[0].id;
 }
@@ -39,7 +65,7 @@ async function createCall(callSid, person) {
 async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall }) {
   await pool.query(
     `UPDATE calls
-     SET status        = 'completed',
+     SET status         = 'completed',
          classification = $2,
          follow_up      = $3,
          raw_response   = $4,
@@ -50,17 +76,25 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
   );
 }
 
+async function getRun(runId) {
+  const { rows: runRows } = await pool.query('SELECT * FROM runs WHERE id = $1', [runId]);
+  if (!runRows[0]) return null;
+  const run = runRows[0];
+
+  const { rows: calls } = await pool.query(
+    'SELECT * FROM calls WHERE run_id = $1 ORDER BY created_at ASC',
+    [runId]
+  );
+
+  const complete = calls.length >= run.total &&
+    calls.every(c => c.status === 'completed');
+
+  return { ...run, calls, complete };
+}
+
 async function getCall(callId) {
   const { rows } = await pool.query('SELECT * FROM calls WHERE id = $1', [callId]);
   return rows[0] || null;
 }
 
-async function getCallsSince(since) {
-  const { rows } = await pool.query(
-    'SELECT * FROM calls WHERE created_at >= $1 ORDER BY created_at ASC',
-    [since]
-  );
-  return rows;
-}
-
-module.exports = { init, createCall, updateCallBySid, getCall, getCallsSince };
+module.exports = { init, createRun, createCall, updateCallBySid, getRun, getCall };
