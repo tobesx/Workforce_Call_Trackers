@@ -10,6 +10,7 @@ const { VoiceResponse } = require('twilio').twiml;
 const { initiateCallSingle } = require('./orchestrator');
 const { handleStatus } = require('./call-handler');
 const { handleMediaStream } = require('./realtime-bridge');
+const db = require('./db');
 
 const audioDir = path.join(__dirname, '../audio');
 if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir);
@@ -21,6 +22,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/audio', express.static(audioDir));
 
 // --- REST API (Retool) ---
+
+app.get('/api/calls/:callId', async (req, res) => {
+  try {
+    const record = await db.getCall(req.params.callId);
+    if (!record) return res.status(404).json({ error: 'not found' });
+    res.json(record);
+  } catch (err) {
+    console.error('getCall error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/outbound/call', async (req, res) => {
   try {
@@ -63,7 +75,12 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`ICO Terminals voice server → http://localhost:${PORT}`);
-  console.log(`Public URL: ${process.env.BASE_URL || '(BASE_URL niet ingesteld)'}`);
-});
+db.init()
+  .then(() => server.listen(PORT, () => {
+    console.log(`ICO Terminals voice server → http://localhost:${PORT}`);
+    console.log(`Public URL: ${process.env.BASE_URL || '(BASE_URL niet ingesteld)'}`);
+  }))
+  .catch(err => {
+    console.error('[DB] Init failed, exiting:', err.message);
+    process.exit(1);
+  });
