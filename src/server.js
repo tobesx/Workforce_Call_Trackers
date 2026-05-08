@@ -23,6 +23,19 @@ app.use('/audio', express.static(audioDir));
 
 // --- REST API (Retool) ---
 
+app.get('/api/calls', async (req, res) => {
+  try {
+    const { since } = req.query;
+    if (!since) return res.status(400).json({ error: 'since parameter required' });
+    const records = await db.getCallsSince(since);
+    const allDone = records.length > 0 && records.every(r => r.status === 'completed');
+    res.json({ calls: records, complete: allDone });
+  } catch (err) {
+    console.error('getCallsSince error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/calls/:callId', async (req, res) => {
   try {
     const record = await db.getCall(req.params.callId);
