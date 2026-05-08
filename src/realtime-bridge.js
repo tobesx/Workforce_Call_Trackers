@@ -5,60 +5,6 @@ const db = require('./db');
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-// --- Audio transcoding: g711_ulaw 8kHz ↔ pcm16 24kHz ---
-
-function decodeMulaw(ulaw) {
-  ulaw = ~ulaw & 0xff;
-  const sign = ulaw & 0x80;
-  const exp = (ulaw >> 4) & 0x07;
-  const mantissa = ulaw & 0x0f;
-  let sample = ((mantissa << 3) + 0x84) << exp;
-  sample -= 0x84;
-  return sign ? -sample : sample;
-}
-
-function encodeMulaw(sample) {
-  const BIAS = 0x84;
-  const CLIP = 32635;
-  let sign = 0;
-  if (sample < 0) { sign = 0x80; sample = -sample; }
-  if (sample > CLIP) sample = CLIP;
-  sample += BIAS;
-  let exp = 7;
-  for (let mask = 0x4000; (sample & mask) === 0 && exp > 0; exp--, mask >>= 1);
-  const mantissa = (sample >> (exp + 3)) & 0x0f;
-  return (~(sign | (exp << 4) | mantissa)) & 0xff;
-}
-
-// Twilio → OpenAI: g711_ulaw 8kHz → pcm16 24kHz (upsample 3x)
-function ulawToPcm16(base64) {
-  const ulaw = Buffer.from(base64, 'base64');
-  const pcm = Buffer.alloc(ulaw.length * 6); // 3x upsample × 2 bytes
-  let offset = 0;
-  for (let i = 0; i < ulaw.length; i++) {
-    const sample = decodeMulaw(ulaw[i]);
-    for (let j = 0; j < 3; j++) {
-      pcm.writeInt16LE(sample, offset);
-      offset += 2;
-    }
-  }
-  return pcm.toString('base64');
-}
-
-// OpenAI → Twilio: pcm16 24kHz → g711_ulaw 8kHz (downsample 3x)
-function pcm16ToUlaw(base64) {
-  const pcm = Buffer.from(base64, 'base64');
-  const outLen = Math.floor(pcm.length / 6); // 2 bytes × 3 = 6 bytes per output sample
-  const ulaw = Buffer.alloc(outLen);
-  for (let i = 0; i < outLen; i++) {
-    const sample = pcm.readInt16LE(i * 6);
-    ulaw[i] = encodeMulaw(sample);
-  }
-  return ulaw.toString('base64');
-}
-
-// --- Helpers ---
-
 function hourToNL(h) {
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   if (h >= 0 && h < 6)  return `${h12} uur 's nachts`;
@@ -127,10 +73,11 @@ function handleMediaStream(twilioWs) {
     log(`OpenAI verbinden voor ${person.name}...`);
 
     openAiWs = new WebSocket(
-      'wss://api.openai.com/v1/realtime?model=gpt-realtime-2',
+      'wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5',
       {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'OpenAI-Beta': 'realtime=v1',
         },
       }
     );
@@ -141,8 +88,17 @@ function handleMediaStream(twilioWs) {
       openAiWs.send(JSON.stringify({
         type: 'session.update',
         session: {
-          type: 'realtime',
+          modalities: ['audio', 'text'],
           instructions: buildSystemPrompt(person, shiftSpeech),
+          voice: 'alloy',
+          input_audio_format: 'g711_ulaw',
+          output_audio_format: 'g711_ulaw',
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.7,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 1000,
+          },
           tools: [{
             type: 'function',
             name: 'classify_response',
@@ -162,22 +118,25 @@ function handleMediaStream(twilioWs) {
       }));
 
       openAiWs.send(JSON.stringify({
-        type: 'response.create',
-        response: {
-          instructions: 'Begin het gesprek nu met de openingszin zoals beschreven in je instructies. Spreek Nederlands.',
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'START_CALL' }],
         },
       }));
+      openAiWs.send(JSON.stringify({ type: 'response.create' }));
       log(`Opening getriggerd voor ${person.name}`);
     });
 
     openAiWs.on('message', (data) => {
       const event = JSON.parse(data.toString());
 
-      if (event.type === 'response.output_audio.delta' && streamSid) {
+      if (event.type === 'response.audio.delta' && streamSid) {
         twilioWs.send(JSON.stringify({
           event: 'media',
           streamSid,
-          media: { payload: pcm16ToUlaw(event.delta) },
+          media: { payload: event.delta },
         }));
       }
 
@@ -284,7 +243,7 @@ function handleMediaStream(twilioWs) {
     if (msg.event === 'media' && openAiWs?.readyState === WebSocket.OPEN) {
       openAiWs.send(JSON.stringify({
         type: 'input_audio_buffer.append',
-        audio: ulawToPcm16(msg.media.payload),
+        audio: msg.media.payload,
       }));
     }
 
