@@ -142,7 +142,7 @@ function handleMediaStream(twilioWs) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          instructions: buildSystemPrompt(person, shiftSpeech),
+          system: buildSystemPrompt(person, shiftSpeech),
           turn_detection: {
             type: 'server_vad',
             threshold: 0.7,
@@ -168,14 +168,11 @@ function handleMediaStream(twilioWs) {
       }));
 
       openAiWs.send(JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: 'START_CALL' }],
+        type: 'response.create',
+        response: {
+          instructions: 'Begin het gesprek nu met de openingszin zoals beschreven in je instructies. Spreek Nederlands.',
         },
       }));
-      openAiWs.send(JSON.stringify({ type: 'response.create' }));
       log(`Opening getriggerd voor ${person.name}`);
     });
 
