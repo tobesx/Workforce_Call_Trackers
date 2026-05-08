@@ -48,9 +48,11 @@ Voorbeelden van toon (niet letterlijk overnemen, gebruik als inspiratie):
 
 STAP 4 — CLASSIFICEER:
 Roep classify_response aan. ALLEEN na stap 3. NOOIT eerder.
+Uitzondering: als de verbinding plots wegvalt of de persoon ophangt zonder te spreken, roep onmiddellijk classify_response aan met classification NO_ANSWER.
 
 ABSOLUTE REGELS:
-- classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken
+- classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken, tenzij de verbinding wegvalt
+- Bij directe hangup of geen spraak: gebruik NO_ANSWER
 - Beantwoord NOOIT vragen buiten planning — verwijs door naar een medewerker
 - Spreek altijd vloeiend Nederlands, kort en professioneel`;
 }
@@ -104,7 +106,7 @@ function handleMediaStream(twilioWs) {
             parameters: {
               type: 'object',
               properties: {
-                classification: { type: 'string', enum: ['YES', 'NO', 'OTHER'] },
+                classification: { type: 'string', enum: ['YES', 'NO', 'OTHER', 'NO_ANSWER'] },
                 followUp: { type: 'boolean' },
                 rawResponse: { type: 'string', description: 'Samenvatting van wat de persoon heeft gezegd' },
               },
@@ -193,8 +195,8 @@ function handleMediaStream(twilioWs) {
       }
     });
 
-    openAiWs.on('error', (e) => err(`OpenAI WS fout voor ${person?.naam}: ${e.message}`));
-    openAiWs.on('close', (code) => log(`OpenAI verbinding gesloten voor ${person?.naam} (code: ${code})`));
+    openAiWs.on('error', (e) => err(`OpenAI WS fout voor ${person?.name}: ${e.message}`));
+    openAiWs.on('close', (code) => log(`OpenAI verbinding gesloten voor ${person?.name} (code: ${code})`));
   }
 
   twilioWs.on('message', (data) => {
@@ -231,7 +233,7 @@ function handleMediaStream(twilioWs) {
     if (msg.event === 'mark') {
       log(`Mark ontvangen van Twilio: ${msg.mark?.name}`);
       if (msg.mark?.name === 'hangup') {
-        log(`Ophangen voor ${person?.naam}...`);
+        log(`Ophangen voor ${person?.name}...`);
         twilioClient.calls(callSid).update({ status: 'completed' })
           .then(() => log(`Call beëindigd: ${callSid}`))
           .catch((e) => err(`Hangup mislukt voor ${callSid}: ${e.message}`));
@@ -246,17 +248,26 @@ function handleMediaStream(twilioWs) {
     }
 
     if (msg.event === 'stop') {
-      log(`Stream gestopt voor ${person?.naam}`);
+      log(`Stream gestopt voor ${person?.name}`);
+      if (!finalLogged && callSid) {
+        finalLogged = true;
+        db.updateCallBySid(callSid, {
+          classification: 'NO_ANSWER',
+          followUp: false,
+          rawResponse: null,
+          answeredCall: false,
+        }).catch(e => err(`DB NO_ANSWER fallback mislukt voor ${callSid}: ${e.message}`));
+      }
       openAiWs?.close();
     }
   });
 
   twilioWs.on('close', () => {
-    log(`Twilio WS gesloten voor ${person?.naam}`);
+    log(`Twilio WS gesloten voor ${person?.name}`);
     openAiWs?.close();
   });
   twilioWs.on('error', (e) => {
-    err(`Twilio WS fout voor ${person?.naam}: ${e.message}`);
+    err(`Twilio WS fout voor ${person?.name}: ${e.message}`);
     openAiWs?.close();
   });
 }
