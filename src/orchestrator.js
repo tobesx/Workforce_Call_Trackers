@@ -6,7 +6,7 @@ const db = require('./db');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-async function initiateCallSingle(person) {
+async function initiateCallSingle(person, runId) {
   sessions.set(`person-${person.id}`, person);
 
   let openingAudio = null;
@@ -25,10 +25,10 @@ async function initiateCallSingle(person) {
     statusCallbackEvent: ['no-answer', 'busy', 'failed', 'completed'],
   });
 
-  const callId = await db.createCall(call.sid, person);
+  const callId = await db.createCall(call.sid, person, runId);
   sessions.set(call.sid, { person, history: [], finalLogged: false, openingAudio });
 
-  console.log(`[OUTBOUND] ${call.sid} → ${person.naam} (${person.telefoon}) callId: ${callId}`);
+  console.log(`[OUTBOUND] ${call.sid} → ${person.naam} callId: ${callId} runId: ${runId}`);
   return { callId, callSid: call.sid };
 }
 
