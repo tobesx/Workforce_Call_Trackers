@@ -88,7 +88,6 @@ function handleMediaStream(twilioWs) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          modalities: ['audio', 'text'],
           instructions: buildSystemPrompt(person, shiftSpeech),
           voice: 'alloy',
           input_audio_format: 'g711_ulaw',
@@ -132,7 +131,7 @@ function handleMediaStream(twilioWs) {
     openAiWs.on('message', (data) => {
       const event = JSON.parse(data.toString());
 
-      if (event.type === 'response.audio.delta') {
+      if (event.type === 'response.output_audio.delta') {
         log(`Audio delta ontvangen (${event.delta?.length ?? 0} bytes)`);
         if (streamSid) {
           twilioWs.send(JSON.stringify({
