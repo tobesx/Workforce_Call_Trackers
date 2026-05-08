@@ -22,7 +22,7 @@ function shiftToSpeech(tijdslot) {
 
 function buildSystemPrompt(person, shiftSpeech) {
   return `Je bent een planning agent van I C O Terminals, een autologistiek bedrijf in de haven van Zeebrugge.
-Je belt ${person.naam} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
+Je belt ${person.name} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
 
 VERPLICHTE GESPREKSFLOW — volg deze stappen altijd in volgorde, sla nooit een stap over:
 
@@ -68,7 +68,7 @@ function handleMediaStream(twilioWs) {
   function err(msg)  { console.error(`[REALTIME] ${msg}`); }
 
   function connectToOpenAI() {
-    log(`OpenAI verbinden voor ${person.naam}...`);
+    log(`OpenAI verbinden voor ${person.name}...`);
 
     openAiWs = new WebSocket(
       'wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5',
@@ -81,7 +81,7 @@ function handleMediaStream(twilioWs) {
     );
 
     openAiWs.on('open', () => {
-      log(`OpenAI verbonden voor ${person.naam}`);
+      log(`OpenAI verbonden voor ${person.name}`);
 
       openAiWs.send(JSON.stringify({
         type: 'session.update',
@@ -124,7 +124,7 @@ function handleMediaStream(twilioWs) {
         },
       }));
       openAiWs.send(JSON.stringify({ type: 'response.create' }));
-      log(`Opening getriggerd voor ${person.naam}`);
+      log(`Opening getriggerd voor ${person.name}`);
     });
 
     openAiWs.on('message', (data) => {
@@ -139,22 +139,22 @@ function handleMediaStream(twilioWs) {
       }
 
       if (event.type === 'input_audio_buffer.speech_started') {
-        log(`${person.naam} begint te spreken`);
+        log(`${person.name} begint te spreken`);
       }
 
       if (event.type === 'input_audio_buffer.speech_stopped') {
-        log(`${person.naam} gestopt met spreken`);
+        log(`${person.name} gestopt met spreken`);
       }
 
       if (event.type === 'conversation.item.input_audio_transcription.completed') {
-        log(`${person.naam} transcript: "${event.transcript}"`);
+        log(`${person.name} transcript: "${event.transcript}"`);
       }
 
       if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response') {
-        log(`classify_response ontvangen voor ${person.naam}: ${event.arguments}`);
+        log(`classify_response ontvangen voor ${person.name}: ${event.arguments}`);
 
         if (finalLogged) {
-          warn(`${person.naam}: classify_response al eerder verwerkt, genegeerd`);
+          warn(`${person.name}: classify_response al eerder verwerkt, genegeerd`);
           return;
         }
 
@@ -162,7 +162,7 @@ function handleMediaStream(twilioWs) {
         try {
           const args = JSON.parse(event.arguments);
           sessions.set(callSid, { person, history: [], finalLogged: true });
-          log(`${person.naam} → ${args.classification} (followUp: ${args.followUp})`);
+          log(`${person.name} → ${args.classification} (followUp: ${args.followUp})`);
 
           db.updateCallBySid(callSid, {
             classification: args.classification,
@@ -177,19 +177,19 @@ function handleMediaStream(twilioWs) {
               streamSid,
               mark: { name: 'hangup' },
             }));
-            log(`Mark 'hangup' verstuurd voor ${person.naam}`);
+            log(`Mark 'hangup' verstuurd voor ${person.name}`);
           }
         } catch (e) {
-          err(`classify_response parse error voor ${person.naam}: ${e.message}`);
+          err(`classify_response parse error voor ${person.name}: ${e.message}`);
         }
       }
 
       if (event.type === 'response.done') {
-        log(`Response voltooid voor ${person.naam}`);
+        log(`Response voltooid voor ${person.name}`);
       }
 
       if (event.type === 'error') {
-        err(`OpenAI fout voor ${person.naam}: ${JSON.stringify(event.error)}`);
+        err(`OpenAI fout voor ${person.name}: ${JSON.stringify(event.error)}`);
       }
     });
 
@@ -221,10 +221,10 @@ function handleMediaStream(twilioWs) {
         return;
       }
       sessions.delete(`person-${personId}`);
-      shiftSpeech = shiftToSpeech(person.tijdslot);
+      shiftSpeech = shiftToSpeech(person.time_slot);
 
       sessions.set(callSid, { person, history: [], finalLogged: false });
-      log(`Stream gestart: ${callSid} → ${person.naam}`);
+      log(`Stream gestart: ${callSid} → ${person.name}`);
       connectToOpenAI();
     }
 

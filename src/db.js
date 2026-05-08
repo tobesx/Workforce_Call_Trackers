@@ -57,7 +57,7 @@ async function createCall(callSid, person, runId) {
     `INSERT INTO calls (call_sid, person_id, name, time_slot, phone, run_id)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
-    [callSid, String(person.id), person.naam, person.tijdslot, person.telefoon, runId || null]
+    [callSid, String(person.id), person.name, person.time_slot, person.phone, runId || null]
   );
   return rows[0].id;
 }
