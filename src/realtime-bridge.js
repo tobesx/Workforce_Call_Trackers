@@ -143,12 +143,6 @@ function handleMediaStream(twilioWs) {
         session: {
           type: 'realtime',
           instructions: buildSystemPrompt(person, shiftSpeech),
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0.7,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 1000,
-          },
           tools: [{
             type: 'function',
             name: 'classify_response',
