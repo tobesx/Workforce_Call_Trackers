@@ -3,8 +3,6 @@ const twilio = require('twilio');
 const { VoiceResponse } = twilio.twiml;
 const sessions = require('./sessions');
 const { synthesize } = require('./tts');
-const { logResponse } = require('./logger');
-const { markCallDone } = require('./run-state');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -117,16 +115,6 @@ async function handleGather(req, res) {
   sessions.update(callSid, { history: updatedMessages });
 
   if (FINAL_CLASSIFICATIONS.includes(classification)) {
-    logResponse({
-      personId: person.id,
-      naam: person.naam,
-      tijdslot: person.tijdslot,
-      callSid,
-      classification,
-      followUp,
-      rawResponse: speechResult,
-      answeredCall: true,
-    });
     sessions.update(callSid, { finalLogged: true });
   }
 
@@ -143,21 +131,7 @@ async function handleStatus(req, res) {
   if (!session) return res.sendStatus(204);
 
   if (!session.finalLogged) {
-    const { person } = session;
-    logResponse({
-      personId: person.id,
-      naam: person.naam,
-      tijdslot: person.tijdslot,
-      callSid: CallSid,
-      classification: 'NO_ANSWER',
-      followUp: false,
-      rawResponse: null,
-      answeredCall: false,
-    });
     sessions.update(CallSid, { finalLogged: true });
-    markCallDone();
-  } else if (CallStatus === 'completed') {
-    markCallDone();
   }
 
   if (CallStatus === 'completed') sessions.delete(CallSid);
