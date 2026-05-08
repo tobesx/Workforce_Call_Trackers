@@ -142,7 +142,7 @@ function handleMediaStream(twilioWs) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          system: buildSystemPrompt(person, shiftSpeech),
+          instructions: buildSystemPrompt(person, shiftSpeech),
           turn_detection: {
             type: 'server_vad',
             threshold: 0.7,
