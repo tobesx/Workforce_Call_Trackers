@@ -3,6 +3,7 @@ const twilio = require('twilio');
 const { VoiceResponse } = twilio.twiml;
 const sessions = require('./sessions');
 const { synthesize } = require('./tts');
+const db = require('./db');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -116,6 +117,12 @@ async function handleGather(req, res) {
 
   if (FINAL_CLASSIFICATIONS.includes(classification)) {
     sessions.update(callSid, { finalLogged: true });
+    db.updateCallBySid(callSid, {
+      classification,
+      followUp,
+      rawResponse: speechResult,
+      answeredCall: true,
+    }).catch(e => console.error(`[DB] update failed for ${callSid}: ${e.message}`));
   }
 
   return respondWithTwiml(res, agentText, classification, callSid);
@@ -132,6 +139,12 @@ async function handleStatus(req, res) {
 
   if (!session.finalLogged) {
     sessions.update(CallSid, { finalLogged: true });
+    db.updateCallBySid(CallSid, {
+      classification: 'NO_ANSWER',
+      followUp: false,
+      rawResponse: null,
+      answeredCall: false,
+    }).catch(e => console.error(`[DB] update failed for ${CallSid}: ${e.message}`));
   }
 
   if (CallStatus === 'completed') sessions.delete(CallSid);

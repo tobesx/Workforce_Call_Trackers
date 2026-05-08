@@ -2,6 +2,7 @@ const twilio = require('twilio');
 const sessions = require('./sessions');
 const { synthesize } = require('./tts');
 const { buildOpeningText } = require('./call-handler');
+const db = require('./db');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -24,10 +25,11 @@ async function initiateCallSingle(person) {
     statusCallbackEvent: ['no-answer', 'busy', 'failed', 'completed'],
   });
 
+  const callId = await db.createCall(call.sid, person);
   sessions.set(call.sid, { person, history: [], finalLogged: false, openingAudio });
 
-  console.log(`[OUTBOUND] ${call.sid} → ${person.naam} (${person.telefoon})`);
-  return { callSid: call.sid };
+  console.log(`[OUTBOUND] ${call.sid} → ${person.naam} (${person.telefoon}) callId: ${callId}`);
+  return { callId, callSid: call.sid };
 }
 
 module.exports = { initiateCallSingle };
