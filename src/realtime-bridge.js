@@ -132,12 +132,15 @@ function handleMediaStream(twilioWs) {
     openAiWs.on('message', (data) => {
       const event = JSON.parse(data.toString());
 
-      if (event.type === 'response.audio.delta' && streamSid) {
-        twilioWs.send(JSON.stringify({
-          event: 'media',
-          streamSid,
-          media: { payload: event.delta },
-        }));
+      if (event.type === 'response.audio.delta') {
+        log(`Audio delta ontvangen (${event.delta?.length ?? 0} bytes)`);
+        if (streamSid) {
+          twilioWs.send(JSON.stringify({
+            event: 'media',
+            streamSid,
+            media: { payload: event.delta },
+          }));
+        }
       }
 
       if (event.type === 'input_audio_buffer.speech_started') {
@@ -187,11 +190,19 @@ function handleMediaStream(twilioWs) {
       }
 
       if (event.type === 'response.done') {
-        log(`Response voltooid voor ${person.name}`);
+        log(`Response voltooid voor ${person.name} — output: ${JSON.stringify(event.response?.output?.map(o => o.type))}`);
       }
 
       if (event.type === 'error') {
         err(`OpenAI fout voor ${person.name}: ${JSON.stringify(event.error)}`);
+      }
+
+      if (!['response.audio.delta', 'response.audio.done', 'input_audio_buffer.append',
+            'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped',
+            'conversation.item.input_audio_transcription.completed',
+            'response.function_call_arguments.delta', 'response.function_call_arguments.done',
+            'response.done', 'error', 'session.created', 'session.updated'].includes(event.type)) {
+        log(`[EVENT] ${event.type}`);
       }
     });
 
