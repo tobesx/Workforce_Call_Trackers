@@ -55,4 +55,12 @@ async function getCall(callId) {
   return rows[0] || null;
 }
 
-module.exports = { init, createCall, updateCallBySid, getCall };
+async function getCallsSince(since) {
+  const { rows } = await pool.query(
+    'SELECT * FROM calls WHERE created_at >= $1 ORDER BY created_at ASC',
+    [since]
+  );
+  return rows;
+}
+
+module.exports = { init, createCall, updateCallBySid, getCall, getCallsSince };
