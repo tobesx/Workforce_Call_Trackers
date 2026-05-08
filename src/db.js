@@ -63,7 +63,7 @@ async function createCall(callSid, person, runId) {
 }
 
 async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall }) {
-  await pool.query(
+  const { rows } = await pool.query(
     `UPDATE calls
      SET status         = 'completed',
          classification = $2,
@@ -71,9 +71,25 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
          raw_response   = $4,
          answered_call  = $5,
          updated_at     = NOW()
-     WHERE call_sid = $1`,
+     WHERE call_sid = $1
+     RETURNING run_id`,
     [callSid, classification, followUp ?? false, rawResponse ?? null, answeredCall ?? false]
   );
+
+  const runId = rows[0]?.run_id;
+  if (runId) {
+    const { rows: runRows } = await pool.query('SELECT total FROM runs WHERE id = $1', [runId]);
+    const { rows: countRows } = await pool.query(
+      "SELECT COUNT(*) FROM calls WHERE run_id = $1 AND status = 'completed'",
+      [runId]
+    );
+    if (parseInt(countRows[0].count) >= runRows[0]?.total) {
+      await pool.query(
+        "UPDATE runs SET status = 'completed', updated_at = NOW() WHERE id = $1",
+        [runId]
+      );
+    }
+  }
 }
 
 async function getRun(runId) {
