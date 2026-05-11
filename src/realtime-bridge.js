@@ -93,9 +93,10 @@ function handleMediaStream(twilioWs) {
           voice: 'alloy',
           input_audio_format: 'g711_ulaw',
           output_audio_format: 'g711_ulaw',
+          input_audio_noise_reduction: { type: 'far_field' },
           turn_detection: {
             type: 'server_vad',
-            threshold: 0.7,
+            threshold: 0.85,
             prefix_padding_ms: 300,
             silence_duration_ms: 1000,
           },
