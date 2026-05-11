@@ -35,11 +35,15 @@ async function init() {
     )
   `);
 
-  // migrate existing calls table if run_id column is missing
   await pool.query(`
     ALTER TABLE calls ADD COLUMN IF NOT EXISTS
       run_id UUID REFERENCES runs(id) ON DELETE SET NULL
   `);
+  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS input_audio_tokens  INTEGER`);
+  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS output_audio_tokens INTEGER`);
+  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS input_text_tokens   INTEGER`);
+  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS output_text_tokens  INTEGER`);
+  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS call_duration_seconds INTEGER`);
 
   console.log('[DB] schema ready');
 }
@@ -62,18 +66,23 @@ async function createCall(callSid, person, runId) {
   return rows[0].id;
 }
 
-async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall }) {
+async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall, inputAudioTokens, outputAudioTokens, inputTextTokens, outputTextTokens }) {
   const { rows } = await pool.query(
     `UPDATE calls
-     SET status         = 'completed',
-         classification = $2,
-         follow_up      = $3,
-         raw_response   = $4,
-         answered_call  = $5,
-         updated_at     = NOW()
+     SET status               = 'completed',
+         classification       = $2,
+         follow_up            = $3,
+         raw_response         = $4,
+         answered_call        = $5,
+         input_audio_tokens   = COALESCE($6, input_audio_tokens),
+         output_audio_tokens  = COALESCE($7, output_audio_tokens),
+         input_text_tokens    = COALESCE($8, input_text_tokens),
+         output_text_tokens   = COALESCE($9, output_text_tokens),
+         updated_at           = NOW()
      WHERE call_sid = $1
      RETURNING run_id`,
-    [callSid, classification, followUp ?? false, rawResponse ?? null, answeredCall ?? false]
+    [callSid, classification, followUp ?? false, rawResponse ?? null, answeredCall ?? false,
+     inputAudioTokens ?? null, outputAudioTokens ?? null, inputTextTokens ?? null, outputTextTokens ?? null]
   );
 
   const runId = rows[0]?.run_id;
@@ -90,6 +99,13 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
       );
     }
   }
+}
+
+async function updateCallDuration(callSid, durationSeconds) {
+  await pool.query(
+    'UPDATE calls SET call_duration_seconds = $2, updated_at = NOW() WHERE call_sid = $1',
+    [callSid, durationSeconds]
+  );
 }
 
 async function getRun(runId) {
@@ -113,4 +129,4 @@ async function getCall(callId) {
   return rows[0] || null;
 }
 
-module.exports = { init, createRun, createCall, updateCallBySid, getRun, getCall };
+module.exports = { init, createRun, createCall, updateCallBySid, updateCallDuration, getRun, getCall };

@@ -3,7 +3,7 @@ const db = require('./db');
 const { notifyCallDone } = require('./orchestrator');
 
 async function handleStatus(req, res) {
-  const { CallSid, CallStatus } = req.body;
+  const { CallSid, CallStatus, CallDuration } = req.body;
   const TERMINAL = ['no-answer', 'busy', 'failed', 'completed'];
 
   if (!TERMINAL.includes(CallStatus)) return res.sendStatus(204);
@@ -20,7 +20,13 @@ async function handleStatus(req, res) {
     }).catch(e => console.error(`[DB] NO_ANSWER update failed for ${CallSid}: ${e.message}`));
   }
 
-  if (CallStatus === 'completed') sessions.delete(CallSid);
+  if (CallStatus === 'completed') {
+    sessions.delete(CallSid);
+    if (CallDuration) {
+      db.updateCallDuration(CallSid, parseInt(CallDuration, 10))
+        .catch(e => console.error(`[DB] duration update failed for ${CallSid}: ${e.message}`));
+    }
+  }
 
   notifyCallDone(CallSid);
   res.sendStatus(204);

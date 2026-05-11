@@ -65,6 +65,7 @@ function handleMediaStream(twilioWs) {
   let finalLogged = false;
   let person = null;
   let shiftSpeech = null;
+  let usage = { inputAudio: 0, outputAudio: 0, inputText: 0, outputText: 0 };
 
   function log(msg)  { console.log(`[REALTIME] ${msg}`); }
   function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
@@ -173,6 +174,10 @@ function handleMediaStream(twilioWs) {
             followUp: args.followUp,
             rawResponse: args.rawResponse,
             answeredCall: true,
+            inputAudioTokens: usage.inputAudio,
+            outputAudioTokens: usage.outputAudio,
+            inputTextTokens: usage.inputText,
+            outputTextTokens: usage.outputText,
           }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
 
           notifyCallDone(callSid);
@@ -191,7 +196,14 @@ function handleMediaStream(twilioWs) {
       }
 
       if (event.type === 'response.done') {
-        log(`Response voltooid voor ${person.name}`);
+        const u = event.response?.usage;
+        if (u) {
+          usage.inputAudio  += u.input_token_details?.audio_tokens  ?? 0;
+          usage.outputAudio += u.output_token_details?.audio_tokens ?? 0;
+          usage.inputText   += u.input_token_details?.text_tokens   ?? 0;
+          usage.outputText  += u.output_token_details?.text_tokens  ?? 0;
+        }
+        log(`Response voltooid voor ${person.name} (tokens in_audio=${usage.inputAudio} out_audio=${usage.outputAudio})`);
       }
 
       if (event.type === 'error') {
@@ -260,6 +272,10 @@ function handleMediaStream(twilioWs) {
           followUp: false,
           rawResponse: null,
           answeredCall: false,
+          inputAudioTokens: usage.inputAudio,
+          outputAudioTokens: usage.outputAudio,
+          inputTextTokens: usage.inputText,
+          outputTextTokens: usage.outputText,
         }).catch(e => err(`DB NO_ANSWER fallback mislukt voor ${callSid}: ${e.message}`));
       }
       openAiWs?.close();
