@@ -1,5 +1,6 @@
 const sessions = require('./sessions');
 const db = require('./db');
+const { notifyCallDone } = require('./orchestrator');
 
 async function handleStatus(req, res) {
   const { CallSid, CallStatus } = req.body;
@@ -21,6 +22,7 @@ async function handleStatus(req, res) {
 
   if (CallStatus === 'completed') sessions.delete(CallSid);
 
+  notifyCallDone(CallSid);
   res.sendStatus(204);
 }
 
