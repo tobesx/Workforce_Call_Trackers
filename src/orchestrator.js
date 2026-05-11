@@ -5,7 +5,7 @@ const db = require('./db');
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // Demo: these 2 are called sequentially so they don't ring simultaneously during a presentation
-const SEQUENTIAL_NAMES = ['Toby Vertommen', 'Jetze Janssens'];
+const SEQUENTIAL_NAMES = ['Dennis De Reyer', 'Michiel Schepers'];
 let seqActiveCallSid = null;
 const seqQueue = []; // [{ person, runId }]
 
