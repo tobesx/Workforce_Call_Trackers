@@ -47,6 +47,7 @@ async function initiateCallSingle(person, runId) {
       console.log(`[SEQ] ${person.name} in wachtrij (actief: ${seqActiveCallSid})`);
       return { callId: null, callSid: null, queued: true };
     }
+    seqActiveCallSid = 'PENDING';
     const result = await dialOut(person, runId);
     seqActiveCallSid = result.callSid;
     return result;
