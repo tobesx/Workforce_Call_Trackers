@@ -59,6 +59,12 @@ async function init() {
       created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // migrate: deduplicate and add unique constraint
+  await pool.query(`DELETE FROM call_usage WHERE id NOT IN (
+    SELECT DISTINCT ON (call_sid) id FROM call_usage ORDER BY call_sid, created_at ASC
+  )`);
+  await pool.query(`ALTER TABLE call_usage DROP CONSTRAINT IF EXISTS call_usage_call_sid_unique`);
+  await pool.query(`ALTER TABLE call_usage ADD CONSTRAINT call_usage_call_sid_unique UNIQUE (call_sid)`);
 
   console.log('[DB] schema ready');
 }
@@ -114,7 +120,13 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
 async function createCallUsage(callSid, { inputAudioTokens, outputAudioTokens, inputTextTokens, outputTextTokens, durationSeconds }) {
   await pool.query(
     `INSERT INTO call_usage (call_sid, input_audio_tokens, output_audio_tokens, input_text_tokens, output_text_tokens, call_duration_seconds)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (call_sid) DO UPDATE SET
+       input_audio_tokens    = COALESCE(EXCLUDED.input_audio_tokens,    call_usage.input_audio_tokens),
+       output_audio_tokens   = COALESCE(EXCLUDED.output_audio_tokens,   call_usage.output_audio_tokens),
+       input_text_tokens     = COALESCE(EXCLUDED.input_text_tokens,     call_usage.input_text_tokens),
+       output_text_tokens    = COALESCE(EXCLUDED.output_text_tokens,    call_usage.output_text_tokens),
+       call_duration_seconds = COALESCE(EXCLUDED.call_duration_seconds, call_usage.call_duration_seconds)`,
     [callSid, inputAudioTokens ?? null, outputAudioTokens ?? null, inputTextTokens ?? null, outputTextTokens ?? null, durationSeconds ?? null]
   );
 }
