@@ -200,13 +200,13 @@ function handleMediaStream(twilioWs) {
 
       if (event.type === 'response.done') {
         const u = event.response?.usage;
+        log(`Response voltooid voor ${person.name} — usage: ${JSON.stringify(u)}`);
         if (u) {
           usage.inputAudio  += u.input_token_details?.audio_tokens  ?? 0;
           usage.outputAudio += u.output_token_details?.audio_tokens ?? 0;
           usage.inputText   += u.input_token_details?.text_tokens   ?? 0;
           usage.outputText  += u.output_token_details?.text_tokens  ?? 0;
         }
-        log(`Response voltooid voor ${person.name} (tokens in_audio=${usage.inputAudio} out_audio=${usage.outputAudio})`);
       }
 
       if (event.type === 'error') {
