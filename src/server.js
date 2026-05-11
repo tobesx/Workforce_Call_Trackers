@@ -57,6 +57,18 @@ app.post('/api/outbound/call', async (req, res) => {
   }
 });
 
+// --- PoC cost analysis endpoint (remove before production) ---
+
+app.get('/api/usage', async (req, res) => {
+  try {
+    const data = await db.getUsage();
+    res.json(data);
+  } catch (err) {
+    console.error('getUsage error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Twilio webhooks ---
 
 app.post('/voice/start', (req, res) => {

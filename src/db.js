@@ -119,6 +119,27 @@ async function createCallUsage(callSid, { inputAudioTokens, outputAudioTokens, i
   );
 }
 
+async function getUsage() {
+  const { rows } = await pool.query(`
+    SELECT
+      cu.call_sid,
+      c.name,
+      c.time_slot,
+      c.classification,
+      c.answered_call,
+      SUM(cu.input_audio_tokens)    AS input_audio_tokens,
+      SUM(cu.output_audio_tokens)   AS output_audio_tokens,
+      SUM(cu.input_text_tokens)     AS input_text_tokens,
+      SUM(cu.output_text_tokens)    AS output_text_tokens,
+      SUM(cu.call_duration_seconds) AS call_duration_seconds
+    FROM call_usage cu
+    JOIN calls c ON c.call_sid = cu.call_sid
+    GROUP BY cu.call_sid, c.name, c.time_slot, c.classification, c.answered_call
+    ORDER BY c.name
+  `);
+  return rows;
+}
+
 async function getRun(runId) {
   const { rows: runRows } = await pool.query('SELECT * FROM runs WHERE id = $1', [runId]);
   if (!runRows[0]) return null;
@@ -140,4 +161,4 @@ async function getCall(callId) {
   return rows[0] || null;
 }
 
-module.exports = { init, createRun, createCall, updateCallBySid, createCallUsage, getRun, getCall };
+module.exports = { init, createRun, createCall, updateCallBySid, createCallUsage, getUsage, getRun, getCall };
