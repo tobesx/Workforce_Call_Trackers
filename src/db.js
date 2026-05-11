@@ -39,11 +39,26 @@ async function init() {
     ALTER TABLE calls ADD COLUMN IF NOT EXISTS
       run_id UUID REFERENCES runs(id) ON DELETE SET NULL
   `);
-  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS input_audio_tokens  INTEGER`);
-  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS output_audio_tokens INTEGER`);
-  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS input_text_tokens   INTEGER`);
-  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS output_text_tokens  INTEGER`);
-  await pool.query(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS call_duration_seconds INTEGER`);
+
+  // remove usage columns from calls if they were added in a previous deploy
+  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS input_audio_tokens`);
+  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS output_audio_tokens`);
+  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS input_text_tokens`);
+  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS output_text_tokens`);
+  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS call_duration_seconds`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS call_usage (
+      id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      call_sid              TEXT NOT NULL,
+      input_audio_tokens    INTEGER,
+      output_audio_tokens   INTEGER,
+      input_text_tokens     INTEGER,
+      output_text_tokens    INTEGER,
+      call_duration_seconds INTEGER,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   console.log('[DB] schema ready');
 }
@@ -66,23 +81,18 @@ async function createCall(callSid, person, runId) {
   return rows[0].id;
 }
 
-async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall, inputAudioTokens, outputAudioTokens, inputTextTokens, outputTextTokens }) {
+async function updateCallBySid(callSid, { classification, followUp, rawResponse, answeredCall }) {
   const { rows } = await pool.query(
     `UPDATE calls
-     SET status               = 'completed',
-         classification       = $2,
-         follow_up            = $3,
-         raw_response         = $4,
-         answered_call        = $5,
-         input_audio_tokens   = COALESCE($6, input_audio_tokens),
-         output_audio_tokens  = COALESCE($7, output_audio_tokens),
-         input_text_tokens    = COALESCE($8, input_text_tokens),
-         output_text_tokens   = COALESCE($9, output_text_tokens),
-         updated_at           = NOW()
+     SET status         = 'completed',
+         classification = $2,
+         follow_up      = $3,
+         raw_response   = $4,
+         answered_call  = $5,
+         updated_at     = NOW()
      WHERE call_sid = $1
      RETURNING run_id`,
-    [callSid, classification, followUp ?? false, rawResponse ?? null, answeredCall ?? false,
-     inputAudioTokens ?? null, outputAudioTokens ?? null, inputTextTokens ?? null, outputTextTokens ?? null]
+    [callSid, classification, followUp ?? false, rawResponse ?? null, answeredCall ?? false]
   );
 
   const runId = rows[0]?.run_id;
@@ -101,10 +111,11 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
   }
 }
 
-async function updateCallDuration(callSid, durationSeconds) {
+async function createCallUsage(callSid, { inputAudioTokens, outputAudioTokens, inputTextTokens, outputTextTokens, durationSeconds }) {
   await pool.query(
-    'UPDATE calls SET call_duration_seconds = $2, updated_at = NOW() WHERE call_sid = $1',
-    [callSid, durationSeconds]
+    `INSERT INTO call_usage (call_sid, input_audio_tokens, output_audio_tokens, input_text_tokens, output_text_tokens, call_duration_seconds)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [callSid, inputAudioTokens ?? null, outputAudioTokens ?? null, inputTextTokens ?? null, outputTextTokens ?? null, durationSeconds ?? null]
   );
 }
 
@@ -129,4 +140,4 @@ async function getCall(callId) {
   return rows[0] || null;
 }
 
-module.exports = { init, createRun, createCall, updateCallBySid, updateCallDuration, getRun, getCall };
+module.exports = { init, createRun, createCall, updateCallBySid, createCallUsage, getRun, getCall };

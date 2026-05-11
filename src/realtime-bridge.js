@@ -174,11 +174,14 @@ function handleMediaStream(twilioWs) {
             followUp: args.followUp,
             rawResponse: args.rawResponse,
             answeredCall: true,
+          }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
+
+          db.createCallUsage(callSid, {
             inputAudioTokens: usage.inputAudio,
             outputAudioTokens: usage.outputAudio,
             inputTextTokens: usage.inputText,
             outputTextTokens: usage.outputText,
-          }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
+          }).catch(e => err(`DB usage insert mislukt voor ${callSid}: ${e.message}`));
 
           notifyCallDone(callSid);
 
@@ -272,11 +275,14 @@ function handleMediaStream(twilioWs) {
           followUp: false,
           rawResponse: null,
           answeredCall: false,
+        }).catch(e => err(`DB NO_ANSWER fallback mislukt voor ${callSid}: ${e.message}`));
+
+        db.createCallUsage(callSid, {
           inputAudioTokens: usage.inputAudio,
           outputAudioTokens: usage.outputAudio,
           inputTextTokens: usage.inputText,
           outputTextTokens: usage.outputText,
-        }).catch(e => err(`DB NO_ANSWER fallback mislukt voor ${callSid}: ${e.message}`));
+        }).catch(e => err(`DB usage insert mislukt voor ${callSid}: ${e.message}`));
       }
       openAiWs?.close();
     }

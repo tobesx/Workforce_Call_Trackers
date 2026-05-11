@@ -23,8 +23,8 @@ async function handleStatus(req, res) {
   if (CallStatus === 'completed') {
     sessions.delete(CallSid);
     if (CallDuration) {
-      db.updateCallDuration(CallSid, parseInt(CallDuration, 10))
-        .catch(e => console.error(`[DB] duration update failed for ${CallSid}: ${e.message}`));
+      db.createCallUsage(CallSid, { durationSeconds: parseInt(CallDuration, 10) })
+        .catch(e => console.error(`[DB] usage duration insert failed for ${CallSid}: ${e.message}`));
     }
   }
 
