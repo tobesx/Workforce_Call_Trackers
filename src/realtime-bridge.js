@@ -2,7 +2,6 @@ const WebSocket = require('ws');
 const twilio = require('twilio');
 const sessions = require('./sessions');
 const db = require('./db');
-const { notifyCallDone } = require('./orchestrator');
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -175,8 +174,6 @@ function handleMediaStream(twilioWs) {
             rawResponse: args.rawResponse,
             answeredCall: true,
           }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
-
-          notifyCallDone(callSid);
 
           if (streamSid) {
             twilioWs.send(JSON.stringify({
