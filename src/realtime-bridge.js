@@ -89,17 +89,22 @@ function handleMediaStream(twilioWs) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          modalities: ['audio', 'text'],
+          output_modalities: ['audio', 'text'],
           instructions: buildSystemPrompt(person, shiftSpeech),
-          voice: 'alloy',
-          input_audio_format: 'g711_ulaw',
-          output_audio_format: 'g711_ulaw',
-          input_audio_noise_reduction: { type: 'far_field' },
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0.85,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 1000,
+          audio: {
+            input: {
+              format: { type: 'audio/pcmu' },
+              turn_detection: {
+                type: 'server_vad',
+                threshold: 0.85,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 1000,
+              },
+            },
+            output: {
+              format: { type: 'audio/pcmu' },
+              voice: 'alloy',
+            },
           },
           tools: [{
             type: 'function',
@@ -134,7 +139,7 @@ function handleMediaStream(twilioWs) {
     openAiWs.on('message', (data) => {
       const event = JSON.parse(data.toString());
 
-      if (event.type === 'response.audio.delta' && streamSid) {
+      if (event.type === 'response.output_audio.delta' && streamSid) {
         twilioWs.send(JSON.stringify({
           event: 'media',
           streamSid,
