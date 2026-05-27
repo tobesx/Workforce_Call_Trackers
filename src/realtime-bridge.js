@@ -74,11 +74,10 @@ function handleMediaStream(twilioWs) {
     log(`OpenAI verbinden voor ${person.name}...`);
 
     openAiWs = new WebSocket(
-      'wss://api.openai.com/v1/realtime?model=gpt-realtime-1.5',
+      'wss://api.openai.com/v1/realtime?model=gpt-realtime-2',
       {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'OpenAI-Beta': 'realtime=v1',
         },
       }
     );
