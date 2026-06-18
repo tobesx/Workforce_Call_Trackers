@@ -2,8 +2,6 @@ require('dotenv').config();
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const { WebSocketServer } = require('ws');
 const { VoiceResponse } = require('twilio').twiml;
 
@@ -12,14 +10,10 @@ const { handleStatus } = require('./call-handler');
 const { handleMediaStream } = require('./realtime-bridge');
 const db = require('./db');
 
-const audioDir = path.join(__dirname, '../audio');
-if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir);
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/audio', express.static(audioDir));
 
 // --- REST API (Retool) ---
 
@@ -53,18 +47,6 @@ app.post('/api/outbound/call', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Single call error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --- PoC cost analysis endpoint (remove before production) ---
-
-app.get('/api/usage', async (req, res) => {
-  try {
-    const data = await db.getUsage();
-    res.json(data);
-  } catch (err) {
-    console.error('getUsage error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

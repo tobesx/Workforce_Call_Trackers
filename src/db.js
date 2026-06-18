@@ -40,32 +40,6 @@ async function init() {
       run_id UUID REFERENCES runs(id) ON DELETE SET NULL
   `);
 
-  // remove usage columns from calls if they were added in a previous deploy
-  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS input_audio_tokens`);
-  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS output_audio_tokens`);
-  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS input_text_tokens`);
-  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS output_text_tokens`);
-  await pool.query(`ALTER TABLE calls DROP COLUMN IF EXISTS call_duration_seconds`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS call_usage (
-      id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      call_sid              TEXT NOT NULL,
-      input_audio_tokens    INTEGER,
-      output_audio_tokens   INTEGER,
-      input_text_tokens     INTEGER,
-      output_text_tokens    INTEGER,
-      call_duration_seconds INTEGER,
-      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  // migrate: deduplicate and add unique constraint
-  await pool.query(`DELETE FROM call_usage WHERE id NOT IN (
-    SELECT DISTINCT ON (call_sid) id FROM call_usage ORDER BY call_sid, created_at ASC
-  )`);
-  await pool.query(`ALTER TABLE call_usage DROP CONSTRAINT IF EXISTS call_usage_call_sid_unique`);
-  await pool.query(`ALTER TABLE call_usage ADD CONSTRAINT call_usage_call_sid_unique UNIQUE (call_sid)`);
-
   console.log('[DB] schema ready');
 }
 
@@ -117,41 +91,6 @@ async function updateCallBySid(callSid, { classification, followUp, rawResponse,
   }
 }
 
-async function createCallUsage(callSid, { inputAudioTokens, outputAudioTokens, inputTextTokens, outputTextTokens, durationSeconds }) {
-  await pool.query(
-    `INSERT INTO call_usage (call_sid, input_audio_tokens, output_audio_tokens, input_text_tokens, output_text_tokens, call_duration_seconds)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (call_sid) DO UPDATE SET
-       input_audio_tokens    = COALESCE(EXCLUDED.input_audio_tokens,    call_usage.input_audio_tokens),
-       output_audio_tokens   = COALESCE(EXCLUDED.output_audio_tokens,   call_usage.output_audio_tokens),
-       input_text_tokens     = COALESCE(EXCLUDED.input_text_tokens,     call_usage.input_text_tokens),
-       output_text_tokens    = COALESCE(EXCLUDED.output_text_tokens,    call_usage.output_text_tokens),
-       call_duration_seconds = COALESCE(EXCLUDED.call_duration_seconds, call_usage.call_duration_seconds)`,
-    [callSid, inputAudioTokens ?? null, outputAudioTokens ?? null, inputTextTokens ?? null, outputTextTokens ?? null, durationSeconds ?? null]
-  );
-}
-
-async function getUsage() {
-  const { rows } = await pool.query(`
-    SELECT
-      cu.call_sid,
-      c.name,
-      c.time_slot,
-      c.classification,
-      c.answered_call,
-      SUM(cu.input_audio_tokens)    AS input_audio_tokens,
-      SUM(cu.output_audio_tokens)   AS output_audio_tokens,
-      SUM(cu.input_text_tokens)     AS input_text_tokens,
-      SUM(cu.output_text_tokens)    AS output_text_tokens,
-      SUM(cu.call_duration_seconds) AS call_duration_seconds
-    FROM call_usage cu
-    JOIN calls c ON c.call_sid = cu.call_sid
-    GROUP BY cu.call_sid, c.name, c.time_slot, c.classification, c.answered_call
-    ORDER BY c.name
-  `);
-  return rows;
-}
-
 async function getRun(runId) {
   const { rows: runRows } = await pool.query('SELECT * FROM runs WHERE id = $1', [runId]);
   if (!runRows[0]) return null;
@@ -173,4 +112,4 @@ async function getCall(callId) {
   return rows[0] || null;
 }
 
-module.exports = { init, createRun, createCall, updateCallBySid, createCallUsage, getUsage, getRun, getCall };
+module.exports = { init, createRun, createCall, updateCallBySid, getRun, getCall };

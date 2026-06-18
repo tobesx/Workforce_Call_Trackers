@@ -64,8 +64,6 @@ function handleMediaStream(twilioWs) {
   let finalLogged = false;
   let person = null;
   let shiftSpeech = null;
-  let usage = { inputAudio: 0, outputAudio: 0, inputText: 0, outputText: 0 };
-
   function log(msg)  { console.log(`[REALTIME] ${msg}`); }
   function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
   function err(msg)  { console.error(`[REALTIME] ${msg}`); }
@@ -193,17 +191,6 @@ function handleMediaStream(twilioWs) {
         }
       }
 
-      if (event.type === 'response.done') {
-        const u = event.response?.usage;
-        if (u) {
-          usage.inputAudio  += u.input_token_details?.audio_tokens  ?? 0;
-          usage.outputAudio += u.output_token_details?.audio_tokens ?? 0;
-          usage.inputText   += u.input_token_details?.text_tokens   ?? 0;
-          usage.outputText  += u.output_token_details?.text_tokens  ?? 0;
-        }
-        log(`Response voltooid voor ${person.name} (totaal: in_audio=${usage.inputAudio} out_audio=${usage.outputAudio} in_text=${usage.inputText} out_text=${usage.outputText})`);
-      }
-
       if (event.type === 'error') {
         err(`OpenAI fout voor ${person.name}: ${JSON.stringify(event.error)}`);
       }
@@ -271,14 +258,6 @@ function handleMediaStream(twilioWs) {
           rawResponse: null,
           answeredCall: false,
         }).catch(e => err(`DB NO_ANSWER fallback mislukt voor ${callSid}: ${e.message}`));
-      }
-      if (callSid) {
-        db.createCallUsage(callSid, {
-          inputAudioTokens: usage.inputAudio,
-          outputAudioTokens: usage.outputAudio,
-          inputTextTokens: usage.inputText,
-          outputTextTokens: usage.outputText,
-        }).catch(e => err(`DB usage insert mislukt voor ${callSid}: ${e.message}`));
       }
       openAiWs?.close();
     }
