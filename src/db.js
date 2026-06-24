@@ -30,6 +30,7 @@ async function init() {
       follow_up      BOOLEAN,
       raw_response   TEXT,
       answered_call  BOOLEAN,
+      voice          TEXT,
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -38,6 +39,10 @@ async function init() {
   await pool.query(`
     ALTER TABLE calls ADD COLUMN IF NOT EXISTS
       run_id UUID REFERENCES runs(id) ON DELETE SET NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE calls ADD COLUMN IF NOT EXISTS voice TEXT
   `);
 
   console.log('[DB] schema ready');
@@ -51,12 +56,12 @@ async function createRun(total) {
   return rows[0].id;
 }
 
-async function createCall(callSid, person, runId) {
+async function createCall(callSid, person, runId, voice) {
   const { rows } = await pool.query(
-    `INSERT INTO calls (call_sid, person_id, name, time_slot, phone, run_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO calls (call_sid, person_id, name, time_slot, phone, run_id, voice)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
-    [callSid, String(person.id), person.name, person.time_slot, person.phone, runId || null]
+    [callSid, String(person.id), person.name, person.time_slot, person.phone, runId || null, voice || null]
   );
   return rows[0].id;
 }

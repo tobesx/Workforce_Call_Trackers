@@ -5,6 +5,16 @@ const db = require('./db');
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
+// Stemmen die de OpenAI Realtime API aanbiedt. Frontend kiest er één per run;
+// ongeldige/ontbrekende waarde valt terug op DEFAULT_VOICE (voorkomt een
+// OpenAI error-event dat de call stil zou slopen).
+const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
+const DEFAULT_VOICE = 'alloy';
+
+function resolveVoice(v) {
+  return VALID_VOICES.includes(v) ? v : DEFAULT_VOICE;
+}
+
 function hourToNL(h) {
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   if (h >= 0 && h < 6)  return `${h12} uur 's nachts`;
@@ -81,7 +91,8 @@ function handleMediaStream(twilioWs) {
     );
 
     openAiWs.on('open', () => {
-      log(`OpenAI verbonden voor ${person.name}`);
+      const voice = resolveVoice(person.voice);
+      log(`OpenAI verbonden voor ${person.name} (stem: ${voice})`);
 
       openAiWs.send(JSON.stringify({
         type: 'session.update',
@@ -101,7 +112,7 @@ function handleMediaStream(twilioWs) {
             },
             output: {
               format: { type: 'audio/pcmu' },
-              voice: 'alloy',
+              voice,
             },
           },
           tools: [{
@@ -273,4 +284,4 @@ function handleMediaStream(twilioWs) {
   });
 }
 
-module.exports = { handleMediaStream };
+module.exports = { handleMediaStream, resolveVoice, VALID_VOICES };

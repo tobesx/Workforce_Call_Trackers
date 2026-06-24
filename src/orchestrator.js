@@ -1,6 +1,7 @@
 const twilio = require('twilio');
 const sessions = require('./sessions');
 const db = require('./db');
+const { resolveVoice } = require('./realtime-bridge');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -16,7 +17,7 @@ async function initiateCallSingle(person, runId) {
     statusCallbackEvent: ['no-answer', 'busy', 'failed', 'completed'],
   });
 
-  const callId = await db.createCall(call.sid, person, runId);
+  const callId = await db.createCall(call.sid, person, runId, resolveVoice(person.voice));
   sessions.set(call.sid, { person, history: [], finalLogged: false });
 
   console.log(`[OUTBOUND] ${call.sid} → ${person.name} callId: ${callId} runId: ${runId}`);
