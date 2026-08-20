@@ -44,7 +44,8 @@ Begin ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van Sixth Ge
 Wacht daarna op het antwoord van de persoon. Zeg niets meer.
 
 STAP 2 — ANTWOORD ONTVANGEN:
-Wacht tot de persoon duidelijk heeft geantwoord. Als het antwoord onduidelijk is, vraag dan EENmalig om verduidelijking: "Kunt u dat herhalen?"
+Wacht tot de persoon duidelijk heeft geantwoord. Laat hem/haar uitspreken; onderbreek nooit.
+Heb je geen verstaanbaar antwoord gehoord — stilte, ruis, een half woord — vraag dan EENmalig: "Sorry, ik heb u niet goed verstaan. Kunt u dat herhalen?" en wacht opnieuw.
 Ga NOOIT verder naar stap 3 als de persoon nog niet heeft gesproken.
 
 STAP 3 — CLASSIFICEER:
@@ -54,6 +55,8 @@ Uitzondering: als de verbinding wegvalt of de persoon hangt op zonder te spreken
 
 ABSOLUTE REGELS:
 - classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken, tenzij de verbinding wegvalt
+- rawResponse is een LETTERLIJK citaat. Verzin nooit een antwoord en vul nooit aan wat je niet gehoord hebt.
+- Twijfel je of je iets gehoord hebt? Dan heb je het niet gehoord. Vraag om herhaling in plaats van te classificeren.
 - Bij directe hangup of geen spraak: gebruik NO_ANSWER
 - Beantwoord NOOIT vragen buiten planning — verwijs door naar een medewerker
 - Spreek altijd vloeiend Nederlands, kort en professioneel`;
@@ -96,6 +99,8 @@ function handleMediaStream(twilioWs) {
   let hangupSent = false;
   let hangupTimer = null;
   let fnCallResponseId = null;
+  let speechStartedAt = null;
+  let lastTranscript = null;
   function log(msg)  { console.log(`[REALTIME] ${msg}`); }
   function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
   function err(msg)  { console.error(`[REALTIME] ${msg}`); }
@@ -139,11 +144,15 @@ function handleMediaStream(twilioWs) {
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
+              // Zonder dit blijft input_audio_transcription.completed stil en
+              // is niet na te gaan wat OpenAI werkelijk gehoord heeft.
+              transcription: { model: 'whisper-1' },
               turn_detection: {
                 type: 'server_vad',
                 threshold: 0.85,
                 prefix_padding_ms: 300,
-                silence_duration_ms: 1000,
+                // 1000 ms knipte mensen af die midden in hun zin adem halen.
+                silence_duration_ms: 1500,
               },
             },
             output: {
@@ -160,7 +169,7 @@ function handleMediaStream(twilioWs) {
               properties: {
                 classification: { type: 'string', enum: ['YES', 'NO', 'OTHER', 'NO_ANSWER'] },
                 followUp: { type: 'boolean' },
-                rawResponse: { type: 'string', description: 'Samenvatting van wat de persoon heeft gezegd' },
+                rawResponse: { type: 'string', description: 'Letterlijk citaat van wat de persoon zei. Nooit parafraseren, nooit invullen wat je niet gehoord hebt.' },
               },
               required: ['classification', 'followUp', 'rawResponse'],
             },
@@ -202,15 +211,22 @@ function handleMediaStream(twilioWs) {
       }
 
       if (event.type === 'input_audio_buffer.speech_started') {
+        speechStartedAt = Date.now();
         log(`${person.name} begint te spreken`);
       }
 
       if (event.type === 'input_audio_buffer.speech_stopped') {
-        log(`${person.name} gestopt met spreken`);
+        const ms = speechStartedAt ? Date.now() - speechStartedAt : 0;
+        log(`${person.name} gestopt met spreken (${ms} ms)`);
       }
 
       if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        lastTranscript = event.transcript;
         log(`${person.name} transcript: "${event.transcript}"`);
+      }
+
+      if (event.type === 'conversation.item.input_audio_transcription.failed') {
+        warn(`${person.name} transcriptie mislukt: ${JSON.stringify(event.error)}`);
       }
 
       if (event.type === 'response.function_call_arguments.done' && event.name === 'classify_response') {
@@ -225,7 +241,7 @@ function handleMediaStream(twilioWs) {
         try {
           const args = JSON.parse(event.arguments);
           sessions.set(callSid, { person, history: [], finalLogged: true });
-          log(`${person.name} → ${args.classification} (followUp: ${args.followUp})`);
+          log(`${person.name} → ${args.classification} (followUp: ${args.followUp}) | gehoord transcript: ${lastTranscript === null ? '(nog geen)' : `"${lastTranscript}"`}`);
 
           db.updateCallBySid(callSid, {
             classification: args.classification,
