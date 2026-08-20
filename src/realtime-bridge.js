@@ -62,21 +62,27 @@ ABSOLUTE REGELS:
 // De sluitingszin wordt bewust in een losse response gevraagd. Een response die
 // een function call bevat, bevat geen audio — daardoor werd er niets
 // uitgesproken voor we ophingen.
-function buildClosingInstructions(args, person, shiftSpeech) {
+function buildClosingInstructions(args) {
   const perOutcome = {
-    YES: `Bevestig kort dat ${person.name} beschikbaar is voor de shift ${shiftSpeech}. Warm en bevestigend.`,
-    NO: 'Bevestig kort dat de afwezigheid genoteerd is. Begripvol, geen druk.',
-    OTHER: 'Zeg dat het antwoord genoteerd is en dat een medewerker contact opneemt. Rustig.',
+    YES: 'Bedank voor de bevestiging en laat weten dat het genoteerd is. Warm.',
+    NO: 'Bedank voor het antwoord en laat weten dat het genoteerd is. Begripvol, geen druk.',
+    OTHER: 'Bedank voor het antwoord en laat weten dat het genoteerd is. Rustig.',
   };
+
+  const needsHandover = args.followUp || args.classification === 'OTHER';
 
   return `De uitkomst van dit gesprek is al vastgelegd als ${args.classification}.
 Spreek NU alleen nog de afsluiting uit. Roep geen enkele tool meer aan.
 
 ${perOutcome[args.classification] || perOutcome.OTHER}
-${args.followUp ? 'Vermeld dat een medewerker contact opneemt over de vraag of opmerking.' : ''}
-Sluit beleefd af (bv. "Tot dan!", "Bedankt, tot ziens!", "Fijne dag nog!").
+${needsHandover ? 'Zeg erbij dat een medewerker hierover contact opneemt.' : ''}
+Sluit beleefd af (bv. "Fijne dag nog!", "Bedankt, tot ziens!").
 
-Maximaal 3 korte zinnen. Vloeiend Nederlands, professioneel en menselijk.`;
+STRIKT:
+- Noem de naam van de persoon NIET.
+- Herhaal de shift of het tijdslot NIET.
+- Maximaal 2 korte zinnen.
+- Vloeiend Nederlands, professioneel en menselijk.`;
 }
 
 function handleMediaStream(twilioWs) {
@@ -241,7 +247,7 @@ function handleMediaStream(twilioWs) {
             response: {
               output_modalities: ['audio'],
               tool_choice: 'none',
-              instructions: buildClosingInstructions(args, person, shiftSpeech),
+              instructions: buildClosingInstructions(args),
             },
           }));
           log(`Sluitingszin aangevraagd voor ${person.name}`);
