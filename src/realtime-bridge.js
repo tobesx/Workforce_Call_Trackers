@@ -145,9 +145,11 @@ function handleMediaStream(twilioWs) {
           audio: {
             input: {
               format: { type: 'audio/pcmu' },
-              // Zonder dit blijft input_audio_transcription.completed stil en
-              // is niet na te gaan wat OpenAI werkelijk gehoord heeft.
-              transcription: { model: 'whisper-1' },
+              // Zonder transcription blijft input_audio_transcription.completed
+              // stil en is niet na te gaan wat OpenAI werkelijk gehoord heeft.
+              // language is vastgezet omdat Whisper anders op Duits gokte bij
+              // een Nederlands antwoord ("Ja, das passt perfekt für mich").
+              transcription: { model: 'whisper-1', language: 'nl' },
               turn_detection: {
                 type: 'server_vad',
                 threshold: 0.85,
