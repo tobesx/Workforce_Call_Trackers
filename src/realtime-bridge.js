@@ -31,13 +31,13 @@ function shiftToSpeech(tijdslot) {
 }
 
 function buildSystemPrompt(person, shiftSpeech) {
-  return `Je bent een planning agent van Get Driven, een autologistiek bedrijf in de haven van Zeebrugge.
+  return `Je bent een planning agent van Sixth Generation.
 Je belt ${person.name} om te vragen of hij/zij beschikbaar is voor een shift ${shiftSpeech}.
 
 VERPLICHTE GESPREKSFLOW — volg deze stappen altijd in volgorde, sla nooit een stap over:
 
 STAP 1 — VRAAG STELLEN:
-Begin ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van Get Driven. Bent u beschikbaar voor een shift ${shiftSpeech}?"
+Begin ALTIJD met exact: "Goedendag, u spreekt met de planningsagent van Sixth Generation. Bent u beschikbaar voor een shift ${shiftSpeech}?"
 Wacht daarna op het antwoord van de persoon. Zeg niets meer.
 
 STAP 2 — ANTWOORD ONTVANGEN:

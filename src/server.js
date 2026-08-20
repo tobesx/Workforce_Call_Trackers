@@ -84,7 +84,7 @@ server.on('upgrade', (req, socket, head) => {
 const PORT = process.env.PORT || 3001;
 db.init()
   .then(() => server.listen(PORT, () => {
-    console.log(`ICO Terminals voice server → http://localhost:${PORT}`);
+    console.log(`Sixth Generation voice server → http://localhost:${PORT}`);
     console.log(`Public URL: ${process.env.BASE_URL || '(BASE_URL niet ingesteld)'}`);
   }))
   .catch(err => {

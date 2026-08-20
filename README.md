@@ -1,4 +1,4 @@
-# ICO Terminals — AI Planning Voice Agent
+# Sixth Generation — AI Planning Voice Agent
 
 Automated availability checking for port logistics shift planning. An AI voice agent calls workers via Twilio, conducts a natural Dutch conversation to confirm availability, and returns structured results.
 
