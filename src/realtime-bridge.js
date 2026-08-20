@@ -14,6 +14,30 @@ const DEFAULT_VOICE = 'alloy';
 // Vangnet: als de sluitingszin nooit komt, toch ophangen.
 const CLOSING_TIMEOUT_MS = 8000;
 
+// Twilio's AMD las een korte voicemailbegroeting als 'human'. Het transcript
+// van het eerste fragment is betrouwbaarder en is al na ~5 s binnen.
+// Bewust alleen zinnen die een werknemer nooit zou zeggen als antwoord op
+// "bent u beschikbaar" — "ik ben niet beschikbaar" mag geen voicemail heten.
+const VOICEMAIL_PATTERNS = [
+  /voicemail/i,
+  /antwoordapparaat/i,
+  /laat (?:een|uw) (?:bericht|boodschap)/i,
+  /na de (?:toon|piep|biep)/i,
+  /probeert te bereiken/i,
+  /spreek (?:uw|een) (?:bericht|boodschap)/i,
+  /is niet beschikbaar op dit moment/i,
+  /leave a message/i,
+  /messagerie|r[ée]pondeur|laissez un message/i,
+];
+
+// Na dit venster loopt er een echt gesprek en zou een match een vals alarm zijn.
+const VOICEMAIL_WINDOW_MS = 20000;
+
+function isVoicemail(transcript, elapsedMs) {
+  if (!transcript || elapsedMs > VOICEMAIL_WINDOW_MS) return false;
+  return VOICEMAIL_PATTERNS.some(re => re.test(transcript));
+}
+
 function resolveVoice(v) {
   return VALID_VOICES.includes(v) ? v : DEFAULT_VOICE;
 }
@@ -101,6 +125,7 @@ function handleMediaStream(twilioWs) {
   let hangupTimer = null;
   let fnCallResponseId = null;
   let speechStartedAt = null;
+  let streamStartedAt = null;
   let lastTranscript = null;
   function log(msg)  { console.log(`[REALTIME] ${msg}`); }
   function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
@@ -226,6 +251,24 @@ function handleMediaStream(twilioWs) {
       if (event.type === 'conversation.item.input_audio_transcription.completed') {
         lastTranscript = event.transcript;
         log(`${person.name} transcript: "${event.transcript}"`);
+
+        // Het model kan hier niet ingrijpen: het komt pas aan zet als de VAD de
+        // beurt afsluit, en een voicemail praat gewoon door.
+        if (!finalLogged && isVoicemail(event.transcript, Date.now() - streamStartedAt)) {
+          finalLogged = true;
+          warn(`${person.name}: voicemail herkend in transcript → NO_ANSWER`);
+          sessions.set(callSid, { person, history: [], finalLogged: true });
+
+          db.updateCallBySid(callSid, {
+            classification: 'NO_ANSWER',
+            followUp: false,
+            rawResponse: event.transcript,
+            answeredCall: false,
+          }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
+
+          sendHangup('voicemail herkend');
+          return;
+        }
       }
 
       if (event.type === 'conversation.item.input_audio_transcription.failed') {
@@ -316,6 +359,7 @@ function handleMediaStream(twilioWs) {
       shiftSpeech = shiftToSpeech(person.time_slot);
 
       sessions.set(callSid, { person, history: [], finalLogged: false });
+      streamStartedAt = Date.now();
       log(`Stream gestart: ${callSid} → ${person.name}`);
       connectToOpenAI();
     }
