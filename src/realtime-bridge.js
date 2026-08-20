@@ -11,6 +11,9 @@ const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_A
 const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
 const DEFAULT_VOICE = 'alloy';
 
+// Vangnet: als de sluitingszin nooit komt, toch ophangen.
+const CLOSING_TIMEOUT_MS = 8000;
+
 function resolveVoice(v) {
   return VALID_VOICES.includes(v) ? v : DEFAULT_VOICE;
 }
@@ -44,31 +47,36 @@ STAP 2 — ANTWOORD ONTVANGEN:
 Wacht tot de persoon duidelijk heeft geantwoord. Als het antwoord onduidelijk is, vraag dan EENmalig om verduidelijking: "Kunt u dat herhalen?"
 Ga NOOIT verder naar stap 3 als de persoon nog niet heeft gesproken.
 
-STAP 3 — ANTWOORD BEVESTIGEN EN AFSLUITEN:
-Reageer natuurlijk en empathisch op wat de persoon zei. Kort, professioneel, menselijk.
-Verwerk in je antwoord:
-- Een erkenning van hun antwoord (passend bij de situatie)
-- Een EXPLICIETE bevestiging van de uitkomst voor je afsluit:
-  - Bij ja: herhaal de shift, bv. "Genoteerd, u bent beschikbaar voor de shift ${shiftSpeech}."
-  - Bij nee: bevestig dat de afwezigheid genoteerd is, bv. "Genoteerd, u bent niet beschikbaar."
-- Als er een follow-up vraag of opmerking was: vermeld dat een medewerker contact opneemt
-- Een beleefde afsluiting (bv. "Tot dan!", "Bedankt, tot ziens!", "Fijne dag nog!")
-
-Voorbeelden van toon (niet letterlijk overnemen, gebruik als inspiratie):
-- Bij ja: warm en bevestigend
-- Bij nee: begripvol, geen druk
-- Bij onduidelijk: rustig, verwijs naar medewerker
-
-STAP 4 — CLASSIFICEER:
-Roep classify_response aan. ALLEEN na stap 3. NOOIT eerder.
-Uitzondering: als de verbinding plots wegvalt of de persoon ophangt zonder te spreken, roep onmiddellijk classify_response aan met classification NO_ANSWER.
+STAP 3 — CLASSIFICEER:
+Roep classify_response aan zodra de persoon duidelijk geantwoord heeft.
+Spreek op dat moment zelf NIETS uit — geen bevestiging, geen afsluiting. De afsluiting wordt je daarna apart gevraagd.
+Uitzondering: als de verbinding wegvalt of de persoon hangt op zonder te spreken, roep classify_response aan met classification NO_ANSWER.
 
 ABSOLUTE REGELS:
 - classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken, tenzij de verbinding wegvalt
 - Bij directe hangup of geen spraak: gebruik NO_ANSWER
 - Beantwoord NOOIT vragen buiten planning — verwijs door naar een medewerker
-- Sluit NOOIT af zonder de uitkomst expliciet te bevestigen
 - Spreek altijd vloeiend Nederlands, kort en professioneel`;
+}
+
+// De sluitingszin wordt bewust in een losse response gevraagd. Een response die
+// een function call bevat, bevat geen audio — daardoor werd er niets
+// uitgesproken voor we ophingen.
+function buildClosingInstructions(args, person, shiftSpeech) {
+  const perOutcome = {
+    YES: `Bevestig kort dat ${person.name} beschikbaar is voor de shift ${shiftSpeech}. Warm en bevestigend.`,
+    NO: 'Bevestig kort dat de afwezigheid genoteerd is. Begripvol, geen druk.',
+    OTHER: 'Zeg dat het antwoord genoteerd is en dat een medewerker contact opneemt. Rustig.',
+  };
+
+  return `De uitkomst van dit gesprek is al vastgelegd als ${args.classification}.
+Spreek NU alleen nog de afsluiting uit. Roep geen enkele tool meer aan.
+
+${perOutcome[args.classification] || perOutcome.OTHER}
+${args.followUp ? 'Vermeld dat een medewerker contact opneemt over de vraag of opmerking.' : ''}
+Sluit beleefd af (bv. "Tot dan!", "Bedankt, tot ziens!", "Fijne dag nog!").
+
+Maximaal 3 korte zinnen. Vloeiend Nederlands, professioneel en menselijk.`;
 }
 
 function handleMediaStream(twilioWs) {
@@ -78,9 +86,27 @@ function handleMediaStream(twilioWs) {
   let finalLogged = false;
   let person = null;
   let shiftSpeech = null;
+  let closingRequested = false;
+  let hangupSent = false;
+  let hangupTimer = null;
+  let fnCallResponseId = null;
   function log(msg)  { console.log(`[REALTIME] ${msg}`); }
   function warn(msg) { console.warn(`[REALTIME] ${msg}`); }
   function err(msg)  { console.error(`[REALTIME] ${msg}`); }
+
+  // Twilio echoot een mark pas terug als alle eerder verstuurde audio is
+  // afgespeeld. Die echo is het signaal om echt op te hangen.
+  function sendHangup(reason) {
+    if (hangupSent || !streamSid) return;
+    hangupSent = true;
+    clearTimeout(hangupTimer);
+    twilioWs.send(JSON.stringify({
+      event: 'mark',
+      streamSid,
+      mark: { name: 'hangup' },
+    }));
+    log(`Mark 'hangup' verstuurd voor ${person?.name} (${reason})`);
+  }
 
   function connectToOpenAI() {
     log(`OpenAI verbinden voor ${person.name}...`);
@@ -122,7 +148,7 @@ function handleMediaStream(twilioWs) {
           tools: [{
             type: 'function',
             name: 'classify_response',
-            description: 'Roep aan nadat sluitingszin uitgesproken is met de finale classificatie van het gesprek.',
+            description: 'Roep aan zodra de persoon duidelijk geantwoord heeft, met de finale classificatie. Spreek zelf geen afsluiting uit — die wordt daarna apart gevraagd.',
             parameters: {
               type: 'object',
               properties: {
@@ -160,6 +186,15 @@ function handleMediaStream(twilioWs) {
         }));
       }
 
+      // Alleen de losse sluitingsresponse telt; de function-call-response
+      // heeft geen audio en een ander response_id.
+      if (event.type === 'response.output_audio.done'
+          && closingRequested
+          && event.response_id !== fnCallResponseId) {
+        log(`Sluitingszin afgespeeld voor ${person.name}`);
+        sendHangup('sluitingszin afgerond');
+      }
+
       if (event.type === 'input_audio_buffer.speech_started') {
         log(`${person.name} begint te spreken`);
       }
@@ -193,14 +228,28 @@ function handleMediaStream(twilioWs) {
             answeredCall: true,
           }).catch(e => err(`DB update mislukt voor ${callSid}: ${e.message}`));
 
-          if (streamSid) {
-            twilioWs.send(JSON.stringify({
-              event: 'mark',
-              streamSid,
-              mark: { name: 'hangup' },
-            }));
-            log(`Mark 'hangup' verstuurd voor ${person.name}`);
+          if (args.classification === 'NO_ANSWER') {
+            sendHangup('NO_ANSWER, geen afsluiting nodig');
+            return;
           }
+
+          closingRequested = true;
+          fnCallResponseId = event.response_id;
+
+          openAiWs.send(JSON.stringify({
+            type: 'response.create',
+            response: {
+              output_modalities: ['audio'],
+              tool_choice: 'none',
+              instructions: buildClosingInstructions(args, person, shiftSpeech),
+            },
+          }));
+          log(`Sluitingszin aangevraagd voor ${person.name}`);
+
+          hangupTimer = setTimeout(
+            () => sendHangup('timeout, sluitingszin bleef uit'),
+            CLOSING_TIMEOUT_MS
+          );
         } catch (e) {
           err(`classify_response parse error voor ${person.name}: ${e.message}`);
         }
@@ -265,6 +314,7 @@ function handleMediaStream(twilioWs) {
 
     if (msg.event === 'stop') {
       log(`Stream gestopt voor ${person?.name}`);
+      clearTimeout(hangupTimer);
       if (!finalLogged && callSid) {
         finalLogged = true;
         db.updateCallBySid(callSid, {
@@ -280,6 +330,7 @@ function handleMediaStream(twilioWs) {
 
   twilioWs.on('close', () => {
     log(`Twilio WS gesloten voor ${person?.name}`);
+    clearTimeout(hangupTimer);
     openAiWs?.close();
   });
   twilioWs.on('error', (e) => {
