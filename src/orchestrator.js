@@ -15,6 +15,12 @@ async function initiateCallSingle(person, runId) {
     statusCallback: `${process.env.BASE_URL}/voice/status`,
     statusCallbackMethod: 'POST',
     statusCallbackEvent: ['no-answer', 'busy', 'failed', 'completed'],
+    // Voicemail neemt op, dus Twilio ziet geen 'no-answer'. AMD draait
+    // asynchroon zodat de begroeting voor echte mensen niet vertraagt.
+    machineDetection: 'Enable',
+    asyncAmd: 'true',
+    asyncAmdStatusCallback: `${process.env.BASE_URL}/voice/amd`,
+    asyncAmdStatusCallbackMethod: 'POST',
   });
 
   const callId = await db.createCall(call.sid, person, runId, resolveVoice(person.voice));

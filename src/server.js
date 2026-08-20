@@ -6,7 +6,7 @@ const { WebSocketServer } = require('ws');
 const { VoiceResponse } = require('twilio').twiml;
 
 const { initiateCallSingle } = require('./orchestrator');
-const { handleStatus } = require('./call-handler');
+const { handleStatus, handleAmd } = require('./call-handler');
 const { handleMediaStream } = require('./realtime-bridge');
 const db = require('./db');
 
@@ -64,6 +64,7 @@ app.post('/voice/start', (req, res) => {
 });
 
 app.post('/voice/status', handleStatus);
+app.post('/voice/amd', handleAmd);
 
 // --- WebSocket server (Twilio Media Streams) ---
 

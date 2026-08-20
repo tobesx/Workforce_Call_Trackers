@@ -57,6 +57,7 @@ ABSOLUTE REGELS:
 - classify_response NOOIT aanroepen als de persoon nog niet heeft gesproken, tenzij de verbinding wegvalt
 - rawResponse is een LETTERLIJK citaat. Verzin nooit een antwoord en vul nooit aan wat je niet gehoord hebt.
 - Twijfel je of je iets gehoord hebt? Dan heb je het niet gehoord. Vraag om herhaling in plaats van te classificeren.
+- Hoor je een voicemail of antwoordapparaat ("laat een bericht na de toon", "is niet beschikbaar", een piep)? Roep ONMIDDELLIJK classify_response aan met NO_ANSWER. Wacht de boodschap niet af en spreek niets in.
 - Bij directe hangup of geen spraak: gebruik NO_ANSWER
 - Beantwoord NOOIT vragen buiten planning — verwijs door naar een medewerker
 - Spreek altijd vloeiend Nederlands, kort en professioneel`;
@@ -337,7 +338,10 @@ function handleMediaStream(twilioWs) {
     if (msg.event === 'stop') {
       log(`Stream gestopt voor ${person?.name}`);
       clearTimeout(hangupTimer);
-      if (!finalLogged && callSid) {
+      // AMD of de statuswebhook kan al geclassificeerd hebben; die uitkomst
+      // niet overschrijven met een lege NO_ANSWER.
+      const session = callSid ? sessions.get(callSid) : null;
+      if (!finalLogged && !session?.finalLogged && callSid) {
         finalLogged = true;
         db.updateCallBySid(callSid, {
           classification: 'NO_ANSWER',
